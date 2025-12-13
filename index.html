@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clarity</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Left Pane: Text Editor -->
+    <div class="left-pane">
+      <div class="pane-header">clarity.instrument</div>
+      <div id="parameters" contenteditable="true">
+    Oscillator 1 Wave: sine
+    Oscillator 1 Octave: 0
+    Oscillator 1 Volume: 0.5
+    Oscillator 2 Wave: sine
+    Oscillator 2 Octave: 1
+    Oscillator 2 Volume: 0.3
+    Oscillator 3 Wave: sine
+    Oscillator 3 Octave: -1
+    Oscillator 3 Volume: 0.2
+    Attack Time: 100
+    Sustain Level: 0.5
+    Release Time: 500
+    Master Volume: 0.8
+    Compressor Threshold: -20
+    Compressor Ratio: 12
+    Compressor Knee: 30
+    Compressor Attack: 0.003
+    Compressor Release: 0.25</div>
+    </div>
+
+    <!-- Right Pane: Controls -->
+    <div class="right-pane">
+      <div class="controls-section" id="osc1-section">
+        <h2>Oscillator 1</h2>
+
+        <div class="slider-container">
+          <label for="osc1-wave">Wave</label>
+          <select id="osc1-wave">
+            <option value="sine">Sine</option>
+            <option value="square">Square</option>
+            <option value="sawtooth">Sawtooth</option>
+            <option value="triangle">Triangle</option>
+          </select>
+        </div>
+
+        <div class="slider-container">
+          <label for="osc1-octave">Octave</label>
+          <input type="range" id="osc1-octave" min="-2" max="2" step="1" value="0">
+        </div>
+
+        <div class="slider-container">
+          <label for="osc1-volume">Volume</label>
+          <input type="range" id="osc1-volume" min="0" max="1" step="0.01" value="0.5">
+        </div>
+      </div>
+
+      <div class="controls-section" id="osc2-section">
+        <h2>Oscillator 2</h2>
+
+        <div class="slider-container">
+          <label for="osc2-wave">Wave</label>
+          <select id="osc2-wave">
+            <option value="sine">Sine</option>
+            <option value="square">Square</option>
+            <option value="sawtooth">Sawtooth</option>
+            <option value="triangle">Triangle</option>
+          </select>
+        </div>
+
+        <div class="slider-container">
+          <label for="osc2-octave">Octave</label>
+          <input type="range" id="osc2-octave" min="-2" max="2" step="1" value="1">
+        </div>
+
+        <div class="slider-container">
+          <label for="osc2-volume">Volume</label>
+          <input type="range" id="osc2-volume" min="0" max="1" step="0.01" value="0.3">
+        </div>
+      </div>
+
+      <div class="controls-section" id="osc3-section">
+        <h2>Oscillator 3</h2>
+
+        <div class="slider-container">
+          <label for="osc3-wave">Wave</label>
+          <select id="osc3-wave">
+            <option value="sine">Sine</option>
+            <option value="square">Square</option>
+            <option value="sawtooth">Sawtooth</option>
+            <option value="triangle">Triangle</option>
+          </select>
+        </div>
+
+        <div class="slider-container">
+          <label for="osc3-octave">Octave</label>
+          <input type="range" id="osc3-octave" min="-2" max="2" step="1" value="-1">
+        </div>
+
+        <div class="slider-container">
+          <label for="osc3-volume">Volume</label>
+          <input type="range" id="osc3-volume" min="0" max="1" step="0.01" value="0.2">
+        </div>
+      </div>
+
+      <div class="controls-section">
+        <h2>Envelope</h2>
+
+        <div class="slider-container">
+          <label for="attack-slider">Attack Time (ms)</label>
+          <input type="range" id="attack-slider" min="0" max="2000" step="100" value="100">
+        </div>
+
+        <div class="slider-container">
+          <label for="sustain-slider">Sustain Level</label>
+          <input type="range" id="sustain-slider" min="0" max="1" step="0.1" value="0.5">
+        </div>
+
+        <div class="slider-container">
+          <label for="release-slider">Release Time (ms)</label>
+          <input type="range" id="release-slider" min="0" max="2000" step="100" value="500">
+        </div>
+
+        <div class="slider-container">
+          <label for="master-volume">Master Volume</label>
+          <input type="range" id="master-volume" min="0" max="1" step="0.01" value="0.8">
+        </div>
+      </div>
+
+      <div class="controls-section">
+        <h2>Compressor</h2>
+
+        <div class="slider-container">
+          <label for="compressor-threshold">Threshold (dB)</label>
+          <input type="range" id="compressor-threshold" min="-100" max="0" step="1" value="-20">
+        </div>
+
+        <div class="slider-container">
+          <label for="compressor-ratio">Ratio</label>
+          <input type="range" id="compressor-ratio" min="1" max="20" step="0.1" value="12">
+        </div>
+
+        <div class="slider-container">
+          <label for="compressor-knee">Knee</label>
+          <input type="range" id="compressor-knee" min="0" max="40" step="1" value="30">
+        </div>
+
+        <div class="slider-container">
+          <label for="compressor-attack">Attack (s)</label>
+          <input type="range" id="compressor-attack" min="0" max="1" step="0.001" value="0.003">
+        </div>
+
+        <div class="slider-container">
+          <label for="compressor-release">Release (s)</label>
+          <input type="range" id="compressor-release" min="0" max="3" step="0.01" value="0.25">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
