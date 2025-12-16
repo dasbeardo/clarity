@@ -73,8 +73,25 @@ let globalConfig = {
     knee: { value: 30, isDefault: true },
     attack: { value: 0.003, isDefault: true },
     release: { value: 0.25, isDefault: true }
-  }
+  },
+  chord: { value: 'none', isDefault: true }
 };
+
+// Chord interval definitions (built from CHORD_DEFINITIONS in chords.js)
+let CHORD_INTERVALS = {};
+
+// Build CHORD_INTERVALS from CHORD_DEFINITIONS
+function buildChordIntervals() {
+  CHORD_INTERVALS = { 'none': [] };
+
+  CHORD_DEFINITIONS.forEach(chord => {
+    // Extract intervals (excluding root note at 0)
+    const intervals = chord.semitones.filter(st => st !== 0);
+    CHORD_INTERVALS[chord.name] = intervals;
+  });
+
+  console.log('Built CHORD_INTERVALS:', Object.keys(CHORD_INTERVALS));
+}
 
 // Flag to prevent slider updates from triggering text regeneration
 let isUpdatingFromText = false;
@@ -93,7 +110,8 @@ const PARAMETER_KEYS = [
   'compressor knee',
   'compressor attack',
   'compressor release',
-  'variable'
+  'variable',
+  'chord'
 ];
 
 // Helper function to resolve a value (either numeric or variable reference)
@@ -581,6 +599,57 @@ function createCompressorSection() {
   return section;
 }
 
+// Create a chord section with controls
+function createChordSection() {
+  const section = document.createElement('div');
+  section.className = 'controls-section';
+  section.id = 'chord-section';
+
+  const header = document.createElement('h2');
+  header.textContent = 'chord';
+  if (globalConfig.chord.isDefault) {
+    header.classList.add('default-param');
+    header.title = 'Using default value (not in document)';
+  }
+  section.appendChild(header);
+
+  // Dropdown for chord type
+  const container = document.createElement('div');
+  container.className = 'slider-container';
+
+  const label = document.createElement('label');
+  label.textContent = 'type';
+  container.appendChild(label);
+
+  const select = document.createElement('select');
+  // Dynamically populate from loaded chord definitions
+  const options = Object.keys(CHORD_INTERVALS);
+  options.forEach(optValue => {
+    const option = document.createElement('option');
+    option.value = optValue;
+    option.textContent = optValue;
+    if (optValue === globalConfig.chord.value) {
+      option.selected = true;
+    }
+    select.appendChild(option);
+  });
+
+  // Event listener to update text and config
+  select.addEventListener('change', (e) => {
+    if (!isUpdatingFromText) {
+      updateParameterInBlocks('chord', e.target.value);
+      // Update config directly (following the pattern of other global parameters)
+      globalConfig.chord.value = e.target.value;
+      globalConfig.chord.isDefault = false;
+    }
+  });
+
+  container.appendChild(select);
+  section.appendChild(container);
+
+  return section;
+}
+
 // Parse text box and update UI visibility and oscillator configs
 function syncUIFromText() {
   const text = getAllBlocksText();
@@ -607,7 +676,8 @@ function syncUIFromText() {
       knee: { value: 30, isDefault: true },
       attack: { value: 0.003, isDefault: true },
       release: { value: 0.25, isDefault: true }
-    }
+    },
+    chord: { value: 'none', isDefault: true }
   };
 
   lines.forEach(line => {
@@ -710,6 +780,12 @@ function syncUIFromText() {
           value: parseFloat(trimmedLine.substring('compressor release '.length)),
           isDefault: false
         };
+      } else if (trimmedLine.startsWith('chord ')) {
+        const chordType = trimmedLine.substring('chord '.length).trim();
+        globalConfig.chord = {
+          value: chordType,
+          isDefault: false
+        };
       }
     }
   });
@@ -765,6 +841,10 @@ function syncUIFromText() {
     const compressorSection = createCompressorSection();
     oscillatorsContainer.appendChild(compressorSection);
 
+    // Create chord section
+    const chordSection = createChordSection();
+    oscillatorsContainer.appendChild(chordSection);
+
     // Create variables section (if there are any variables)
     const variablesSection = createVariablesSection();
     if (variablesSection) {
@@ -804,13 +884,14 @@ class PolyphonyManager {
     this.activeNotes = new Map();
   }
 
-  startNote(frequency, noteId, velocity = 127) {
+  startNote(frequency, noteId, velocity = 127, isSynthetic = false) {
     if (this.activeNotes.has(noteId)) {
       this.stopNote(noteId);
     }
-    const note = new Note(frequency, noteId, this);
+    const note = new Note(frequency, noteId, this, isSynthetic);
     this.activeNotes.set(noteId, note);
     note.start(velocity);
+    updateNoteDisplay();
   }
 
   stopNote(noteId) {
@@ -818,21 +899,24 @@ class PolyphonyManager {
     if (note) {
       note.stop();
       this.activeNotes.delete(noteId);
+      updateNoteDisplay();
     }
   }
 
   stopAllNotes() {
     this.activeNotes.forEach((note) => note.stop());
     this.activeNotes.clear();
+    updateNoteDisplay();
   }
 }
 
 // Encapsulated Note class with multiple oscillators, each with independent envelope
 class Note {
-  constructor(frequency, noteId, manager) {
+  constructor(frequency, noteId, manager, isSynthetic = false) {
     this.frequency = frequency;
     this.noteId = noteId;
     this.manager = manager;
+    this.isSynthetic = isSynthetic;
 
     // Create master envelope gain node (applies to all oscillators)
     this.masterEnvelopeGain = audioContext.createGain();
@@ -970,6 +1054,65 @@ const parametersTextbox = document.getElementById("parameters");
 
 // Polyphony Manager
 const polyphonyManager = new PolyphonyManager();
+
+// ===== Chord Generation Functions =====
+
+// Calculate all frequencies for a chord based on root frequency
+function getChordFrequencies(rootFrequency) {
+  const chordType = globalConfig.chord.value;
+  const intervals = CHORD_INTERVALS[chordType] || [];
+
+  // Always include root
+  const frequencies = [rootFrequency];
+
+  // Add chord tones
+  intervals.forEach(semitones => {
+    // frequency = rootFrequency * 2^(semitones/12)
+    const chordFrequency = rootFrequency * Math.pow(2, semitones / 12);
+    frequencies.push(chordFrequency);
+  });
+
+  return frequencies;
+}
+
+// ===== Note Display Functions =====
+
+// Convert frequency to note name (e.g., 440Hz -> A4)
+function frequencyToNoteName(frequency) {
+  const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const midiNote = Math.round(12 * Math.log2(frequency / 440) + 69);
+  const octave = Math.floor(midiNote / 12) - 1;
+  const noteName = noteNames[midiNote % 12];
+  return `${noteName}${octave}`;
+}
+
+// Update the note display to show currently playing notes
+function updateNoteDisplay() {
+  const noteDisplayText = document.getElementById('note-display-text');
+
+  if (polyphonyManager.activeNotes.size === 0) {
+    noteDisplayText.textContent = '--';
+    return;
+  }
+
+  // Display all currently active notes (for polyphony), sorted by frequency
+  const notes = Array.from(polyphonyManager.activeNotes.values())
+    .sort((a, b) => a.frequency - b.frequency); // Sort lowest to highest
+
+  // Build HTML with different colors for root vs synthetic notes
+  const noteHTML = notes.map(note => {
+    const noteName = frequencyToNoteName(note.frequency);
+    if (note.isSynthetic) {
+      // Synthetic notes in muted gray color
+      return `<span style="color: #969896;">${noteName}</span>`;
+    } else {
+      // Root notes in default cyan color
+      return `<span style="color: #5fd3bc;">${noteName}</span>`;
+    }
+  }).join(' <span style="color: #969896;">+</span> ');
+
+  noteDisplayText.innerHTML = noteHTML;
+}
 
 // ===== Block-Based Editor Functions =====
 
@@ -1871,13 +2014,23 @@ navigator.requestMIDIAccess()
 
 function handleMIDIMessage(message) {
   const [status, note, velocity] = message.data;
-  const frequency = 440 * Math.pow(2, (note - 69) / 12);
-  const noteId = `midi-${note}`;
+  const rootFrequency = 440 * Math.pow(2, (note - 69) / 12);
 
   if (status === 144 && velocity > 0) {
-    polyphonyManager.startNote(frequency, noteId, velocity);
+    // Note on - start all chord notes
+    const frequencies = getChordFrequencies(rootFrequency);
+    frequencies.forEach((freq, index) => {
+      const noteId = `midi-${note}-${index}`;
+      const isSynthetic = index > 0; // First note (index 0) is root, rest are synthetic
+      polyphonyManager.startNote(freq, noteId, velocity, isSynthetic);
+    });
   } else if (status === 128 || (status === 144 && velocity === 0)) {
-    polyphonyManager.stopNote(noteId);
+    // Note off - stop all chord notes
+    const frequencies = getChordFrequencies(rootFrequency);
+    frequencies.forEach((freq, index) => {
+      const noteId = `midi-${note}-${index}`;
+      polyphonyManager.stopNote(noteId);
+    });
   }
 }
 
@@ -1922,9 +2075,14 @@ document.addEventListener("keydown", (e) => {
     e.stopPropagation();
     activeKeys.add(key);
 
-    const frequency = 440 * Math.pow(2, (midiNote - 69) / 12);
-    const noteId = `keyboard-${key}`;
-    polyphonyManager.startNote(frequency, noteId, 100);
+    const rootFrequency = 440 * Math.pow(2, (midiNote - 69) / 12);
+    const frequencies = getChordFrequencies(rootFrequency);
+
+    frequencies.forEach((freq, index) => {
+      const noteId = `keyboard-${key}-${index}`;
+      const isSynthetic = index > 0; // First note (index 0) is root, rest are synthetic
+      polyphonyManager.startNote(freq, noteId, 100, isSynthetic);
+    });
   }
 });
 
@@ -1940,8 +2098,13 @@ document.addEventListener("keyup", (e) => {
     e.stopPropagation();
     activeKeys.delete(key);
 
-    const noteId = `keyboard-${key}`;
-    polyphonyManager.stopNote(noteId);
+    const rootFrequency = 440 * Math.pow(2, (midiNote - 69) / 12);
+    const frequencies = getChordFrequencies(rootFrequency);
+
+    frequencies.forEach((freq, index) => {
+      const noteId = `keyboard-${key}-${index}`;
+      polyphonyManager.stopNote(noteId);
+    });
   }
 });
 
@@ -1955,9 +2118,18 @@ document.addEventListener("blur", (e) => {
   }
 }, true);
 
-// Initialize
-initializeBlocks();
-syncUIFromText();
+// Initialize application
+function initialize() {
+  // Build chord intervals from definitions
+  buildChordIntervals();
+
+  // Then initialize the rest of the UI
+  initializeBlocks();
+  syncUIFromText();
+}
+
+// Start initialization
+initialize();
 
 // ===== Command Modal (Slash Menu) =====
 
