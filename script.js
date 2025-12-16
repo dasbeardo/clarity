@@ -53,11 +53,25 @@ let oscillatorConfigs = [
 ];
 
 // Store oscillator names in order (used when updating text from sliders)
-let oscillatorNames = ['prime', 'bass', 'sub'];
+// Pick 3 random names for default oscillators
+let oscillatorNames = [];
+function initializeDefaultOscillatorNames() {
+  const shuffled = [...variable_names].sort(() => Math.random() - 0.5);
+  oscillatorNames = shuffled.slice(0, 3);
+}
+// Initialize will be called after variable_names is loaded
 
 // Variables - user-defined named values
 // Format: { name: { value, min, max } }
 let variables = {};
+
+// LFO configurations - dynamically updated from text box
+// Format: { name: { rate, depth, wave } }
+let lfoConfigs = {};
+
+// Note-specific configurations - dynamically updated from text box
+// Format: { noteName: { pitch: lfoName } }
+let noteConfigs = {};
 
 // Global configuration - dynamically updated from text box
 let globalConfig = {
@@ -101,6 +115,7 @@ const PARAMETER_KEYS = [
   'wave',
   'octave',
   'volume',
+  'pitch',
   'attack time',
   'sustain level',
   'release time',
@@ -111,7 +126,9 @@ const PARAMETER_KEYS = [
   'compressor attack',
   'compressor release',
   'variable',
-  'chord'
+  'chord',
+  'rate',
+  'depth'
 ];
 
 // Helper function to resolve a value (either numeric or variable reference)
@@ -666,6 +683,126 @@ function createChordSection() {
   return section;
 }
 
+// Create LFO section
+function createLFOSection(name, config) {
+  const section = document.createElement('div');
+  section.className = 'controls-section';
+  section.dataset.lfoName = name;
+
+  const header = document.createElement('h2');
+  header.textContent = `lfo ${name}`;
+  section.appendChild(header);
+
+  // Rate slider (0-20 Hz)
+  const rateContainer = document.createElement('div');
+  rateContainer.className = 'slider-container';
+  const rateLabel = document.createElement('label');
+  rateLabel.textContent = 'rate';
+  const rateSlider = document.createElement('input');
+  rateSlider.type = 'range';
+  rateSlider.min = '0';
+  rateSlider.max = '20';
+  rateSlider.step = '0.1';
+  rateSlider.value = config.rate;
+  rateSlider.addEventListener('input', () => {
+    if (!isUpdatingFromText) {
+      updateLFOParameterInBlocks(name, 'rate', rateSlider.value);
+    }
+  });
+  rateContainer.appendChild(rateLabel);
+  rateContainer.appendChild(rateSlider);
+  section.appendChild(rateContainer);
+
+  // Depth slider (0-50 cents)
+  const depthContainer = document.createElement('div');
+  depthContainer.className = 'slider-container';
+  const depthLabel = document.createElement('label');
+  depthLabel.textContent = 'depth';
+  const depthSlider = document.createElement('input');
+  depthSlider.type = 'range';
+  depthSlider.min = '0';
+  depthSlider.max = '50';
+  depthSlider.step = '1';
+  depthSlider.value = config.depth;
+  depthSlider.addEventListener('input', () => {
+    if (!isUpdatingFromText) {
+      updateLFOParameterInBlocks(name, 'depth', depthSlider.value);
+    }
+  });
+  depthContainer.appendChild(depthLabel);
+  depthContainer.appendChild(depthSlider);
+  section.appendChild(depthContainer);
+
+  // Wave selector
+  const waveContainer = document.createElement('div');
+  waveContainer.className = 'slider-container';
+  const waveLabel = document.createElement('label');
+  waveLabel.textContent = 'wave';
+  const waveSelect = document.createElement('select');
+  ['sine', 'triangle', 'square', 'sawtooth'].forEach(waveType => {
+    const option = document.createElement('option');
+    option.value = waveType;
+    option.textContent = waveType;
+    if (config.wave === waveType) option.selected = true;
+    waveSelect.appendChild(option);
+  });
+  waveSelect.addEventListener('change', () => {
+    if (!isUpdatingFromText) {
+      updateLFOParameterInBlocks(name, 'wave', waveSelect.value);
+    }
+  });
+  waveContainer.appendChild(waveLabel);
+  waveContainer.appendChild(waveSelect);
+  section.appendChild(waveContainer);
+
+  return section;
+}
+
+// Update LFO parameter in text blocks
+function updateLFOParameterInBlocks(lfoName, parameterName, value) {
+  const blocks = Array.from(parametersTextbox.querySelectorAll('.block'));
+  let inLFO = false;
+  let lfoBlock = null;
+
+  for (const block of blocks) {
+    const content = block.querySelector('.block-content');
+    if (!content) continue;
+
+    const text = content.textContent;
+
+    // Check if this is the LFO header we're looking for
+    const lfoMatch = text.match(/^lfo\s+(.+)$/i);
+    if (lfoMatch && lfoMatch[1].trim() === lfoName) {
+      inLFO = true;
+      lfoBlock = block;
+      continue;
+    }
+
+    // If we hit another non-indented line, we've left the LFO block
+    if (!text.startsWith('  ')) {
+      inLFO = false;
+    }
+
+    // If we're in the right LFO block and this is the parameter line
+    if (inLFO && text.trim().startsWith(parameterName + ' ')) {
+      content.textContent = `  ${parameterName} ${value}`;
+      formatBlock(block);
+      scrollToAndPulse(block, true);
+      syncUIFromText();
+      return;
+    }
+  }
+
+  // If we didn't find the parameter, add it after the LFO header
+  if (lfoBlock) {
+    const newBlock = createBlock(`  ${parameterName} ${value}`);
+    lfoBlock.insertAdjacentElement('afterend', newBlock);
+    formatBlock(newBlock);
+    scrollToAndPulse(newBlock, true);
+    syncUIFromText();
+  }
+}
+
 // Parse text box and update UI visibility and oscillator configs
 function syncUIFromText() {
   const text = getAllBlocksText();
@@ -675,8 +812,22 @@ function syncUIFromText() {
   const oscillatorsByName = new Map();
   let currentOscillatorName = null;
 
+  // Track LFOs by name in order of appearance
+  const lfosByName = new Map();
+  let currentLFOName = null;
+
+  // Track notes by name
+  const notesByName = new Map();
+  let currentNoteName = null;
+
   // Reset variables
   variables = {};
+
+  // Reset LFO configs
+  lfoConfigs = {};
+
+  // Reset note configs
+  noteConfigs = {};
 
   // Reset global config to defaults
   globalConfig = {
@@ -701,18 +852,60 @@ function syncUIFromText() {
     const oscMatch = line.match(/^oscillator\s+(.+)$/i);
     if (oscMatch) {
       currentOscillatorName = oscMatch[1].trim();
+      currentLFOName = null;
       if (!oscillatorsByName.has(currentOscillatorName)) {
         oscillatorsByName.set(currentOscillatorName, {
           wave: null,
           octave: null,
           volume: null,
+          pitch: null,
           attack: null,
           sustain: null,
           release: null
         });
       }
-    } else if (line.startsWith('  ') && currentOscillatorName) {
-      // This is an indented parameter belonging to current oscillator
+      return;
+    }
+
+    // Check if this is an LFO heading (not indented, starts with "lfo ")
+    const lfoMatch = line.match(/^lfo\s+(.+)$/i);
+    if (lfoMatch) {
+      currentLFOName = lfoMatch[1].trim();
+      currentOscillatorName = null;
+      currentNoteName = null;
+      if (!lfosByName.has(currentLFOName)) {
+        lfosByName.set(currentLFOName, {
+          rate: null,
+          depth: null,
+          wave: null
+        });
+      }
+      return;
+    }
+
+    // Check if this is a note heading (not indented, starts with "note ")
+    const noteMatch = line.match(/^note\s+(.+)$/i);
+    if (noteMatch) {
+      // Parse multiple note names separated by spaces
+      const noteNames = noteMatch[1].trim().toLowerCase().split(/\s+/);
+      currentNoteName = noteNames; // Store as array for multi-note support
+      currentOscillatorName = null;
+      currentLFOName = null;
+
+      // Create an entry for each note name
+      noteNames.forEach(noteName => {
+        if (!notesByName.has(noteName)) {
+          notesByName.set(noteName, {
+            pitch: null,
+            chord: null
+          });
+        }
+      });
+      return;
+    }
+
+    // Handle indented lines
+    if (line.startsWith('  ')) {
       const trimmedLine = line.trim();
 
       // Try to match against known parameter keys
@@ -728,17 +921,51 @@ function syncUIFromText() {
 
       if (!matchedKey) return;
 
-      const osc = oscillatorsByName.get(currentOscillatorName);
+      // If we're in an oscillator block
+      if (currentOscillatorName) {
+        const osc = oscillatorsByName.get(currentOscillatorName);
 
-      if (matchedKey === 'wave') osc.wave = value;
-      if (matchedKey === 'octave') osc.octave = parseInt(resolveValue(value));
-      if (matchedKey === 'volume') osc.volume = resolveValue(value) / 100;
-      if (matchedKey === 'attack time') osc.attack = resolveValue(value);
-      if (matchedKey === 'sustain level') osc.sustain = resolveValue(value) / 100;
-      if (matchedKey === 'release time') osc.release = resolveValue(value);
-    } else if (!line.startsWith('  ')) {
-      // Non-indented line - could be global parameter
+        if (matchedKey === 'wave') osc.wave = value;
+        if (matchedKey === 'octave') osc.octave = parseInt(resolveValue(value));
+        if (matchedKey === 'volume') osc.volume = resolveValue(value) / 100;
+        if (matchedKey === 'pitch') osc.pitch = value;
+        if (matchedKey === 'attack time') osc.attack = resolveValue(value);
+        if (matchedKey === 'sustain level') osc.sustain = resolveValue(value) / 100;
+        if (matchedKey === 'release time') osc.release = resolveValue(value);
+      }
+
+      // If we're in an LFO block
+      if (currentLFOName) {
+        const lfo = lfosByName.get(currentLFOName);
+
+        if (matchedKey === 'rate') lfo.rate = parseFloat(value);
+        if (matchedKey === 'depth') lfo.depth = parseFloat(value);
+        if (matchedKey === 'wave') lfo.wave = value;
+      }
+
+      // If we're in a note block (currentNoteName is an array of note names)
+      if (currentNoteName) {
+        currentNoteName.forEach(noteName => {
+          const note = notesByName.get(noteName);
+          if (note) {
+            if (matchedKey === 'pitch') {
+              note.pitch = value;
+            }
+            if (matchedKey === 'chord') {
+              note.chord = value;
+            }
+          }
+        });
+      }
+
+      return;
+    }
+
+    // Non-indented line - could be global parameter
+    if (!line.startsWith('  ')) {
       currentOscillatorName = null;
+      currentLFOName = null;
+      currentNoteName = null;
 
       const trimmedLine = line.trim();
       if (trimmedLine.startsWith('variable ')) {
@@ -825,11 +1052,29 @@ function syncUIFromText() {
       wave: osc.wave !== null ? osc.wave : 'sine',
       octave: osc.octave !== null ? osc.octave : 0,
       volume: osc.volume !== null ? osc.volume : 0.5,
+      pitch: osc.pitch !== null ? osc.pitch : null,
       attack: osc.attack !== null ? osc.attack : 100,
       sustain: osc.sustain !== null ? osc.sustain : 0.5,
       release: osc.release !== null ? osc.release : 500
     };
     oscillatorConfigs.push(config);
+  });
+
+  // Populate lfoConfigs from parsed LFOs
+  lfosByName.forEach((lfo, name) => {
+    lfoConfigs[name] = {
+      rate: lfo.rate !== null ? lfo.rate : 5,
+      depth: lfo.depth !== null ? lfo.depth : 10,
+      wave: lfo.wave !== null ? lfo.wave : 'sine'
+    };
+  });
+
+  // Populate noteConfigs from parsed notes
+  notesByName.forEach((note, name) => {
+    noteConfigs[name] = {
+      pitch: note.pitch,
+      chord: note.chord
+    };
   });
 
   // Dynamically generate UI sections for ALL oscillators AND global parameters
@@ -842,6 +1087,12 @@ function syncUIFromText() {
     oscillatorConfigs.forEach((config, index) => {
       const name = oscillatorNames[index];
       const section = createOscillatorSection(name, index, config);
+      oscillatorsContainer.appendChild(section);
+    });
+
+    // Create a section for each LFO
+    Object.entries(lfoConfigs).forEach(([name, config]) => {
+      const section = createLFOSection(name, config);
       oscillatorsContainer.appendChild(section);
     });
 
@@ -900,11 +1151,11 @@ class PolyphonyManager {
     this.activeNotes = new Map();
   }
 
-  startNote(frequency, noteId, velocity = 127, isSynthetic = false) {
+  startNote(frequency, noteId, velocity = 127, isSynthetic = false, midiNote = null) {
     if (this.activeNotes.has(noteId)) {
       this.stopNote(noteId);
     }
-    const note = new Note(frequency, noteId, this, isSynthetic);
+    const note = new Note(frequency, noteId, this, isSynthetic, midiNote);
     this.activeNotes.set(noteId, note);
     note.start(velocity);
     updateNoteDisplay();
@@ -928,11 +1179,27 @@ class PolyphonyManager {
 
 // Encapsulated Note class with multiple oscillators, each with independent envelope
 class Note {
-  constructor(frequency, noteId, manager, isSynthetic = false) {
+  constructor(frequency, noteId, manager, isSynthetic = false, midiNote = null) {
     this.frequency = frequency;
     this.noteId = noteId;
     this.manager = manager;
     this.isSynthetic = isSynthetic;
+    this.midiNote = midiNote;
+
+    // Convert MIDI note to note name for note-specific config lookup
+    let noteSpecificConfig = null;
+    if (midiNote !== null) {
+      const noteName = midiNoteToNoteName(midiNote); // e.g., "c4"
+
+      // First check for exact match
+      noteSpecificConfig = noteConfigs[noteName];
+
+      // If not found, check for wildcard match (note name without octave)
+      if (!noteSpecificConfig) {
+        const noteNameWithoutOctave = noteName.replace(/\d+$/, ''); // e.g., "c4" -> "c"
+        noteSpecificConfig = noteConfigs[noteNameWithoutOctave];
+      }
+    }
 
     // Create master envelope gain node (applies to all oscillators)
     this.masterEnvelopeGain = audioContext.createGain();
@@ -944,6 +1211,7 @@ class Note {
     this.oscillators = [];
     this.oscillatorEnvelopes = []; // Each oscillator's envelope gain node
     this.configs = []; // Store config for each oscillator for stop()
+    this.lfos = []; // Store LFO oscillators for cleanup
 
     oscillatorConfigs.forEach((config) => {
       if (config.volume > 0) { // Only create if volume > 0
@@ -955,7 +1223,37 @@ class Note {
 
         // Calculate frequency with octave offset
         const octaveMultiplier = Math.pow(2, config.octave);
-        osc.frequency.value = frequency * octaveMultiplier;
+        const baseFrequency = frequency * octaveMultiplier;
+        osc.frequency.value = baseFrequency;
+
+        // Determine which pitch LFO to use (note-specific overrides oscillator config)
+        const pitchLFO = (noteSpecificConfig && noteSpecificConfig.pitch) || config.pitch;
+
+        // Check if this oscillator has pitch modulation (LFO)
+        if (pitchLFO && lfoConfigs[pitchLFO]) {
+          const lfoConfig = lfoConfigs[pitchLFO];
+
+          // Create LFO oscillator
+          const lfo = audioContext.createOscillator();
+          lfo.type = lfoConfig.wave;
+          lfo.frequency.value = lfoConfig.rate;
+
+          // Create gain node to scale LFO output (controls modulation depth)
+          // Convert depth from cents to Hz: depth_hz ≈ frequency * (depth_cents / 1200)
+          const depthGain = audioContext.createGain();
+          const depthInHz = baseFrequency * (lfoConfig.depth / 1200);
+          depthGain.gain.value = depthInHz;
+
+          // Connect: LFO → depth gain → oscillator frequency
+          lfo.connect(depthGain);
+          depthGain.connect(osc.frequency);
+
+          // Start LFO immediately
+          lfo.start();
+
+          // Store LFO for cleanup
+          this.lfos.push({ lfo, depthGain });
+        }
 
         // Set envelope gain to 0 initially (will be ramped in start())
         envelopeGain.gain.setValueAtTime(0, audioContext.currentTime);
@@ -1033,6 +1331,17 @@ class Note {
         }
       });
 
+      // Stop and disconnect all LFOs
+      this.lfos.forEach(({ lfo, depthGain }) => {
+        if (lfo) {
+          lfo.stop();
+          lfo.disconnect();
+        }
+        if (depthGain) {
+          depthGain.disconnect();
+        }
+      });
+
       // Disconnect all envelope gains
       this.oscillatorEnvelopes.forEach(gain => {
         if (gain) {
@@ -1074,8 +1383,28 @@ const polyphonyManager = new PolyphonyManager();
 // ===== Chord Generation Functions =====
 
 // Calculate all frequencies for a chord based on root frequency
-function getChordFrequencies(rootFrequency) {
-  const chordType = globalConfig.chord.value;
+function getChordFrequencies(rootFrequency, midiNote = null) {
+  let chordType = globalConfig.chord.value;
+
+  // Check for note-specific chord config (overrides global)
+  if (midiNote !== null) {
+    const noteName = midiNoteToNoteName(midiNote); // e.g., "c4"
+
+    // First check for exact match
+    let noteSpecificConfig = noteConfigs[noteName];
+
+    // If not found, check for wildcard match (note name without octave)
+    if (!noteSpecificConfig) {
+      const noteNameWithoutOctave = noteName.replace(/\d+$/, ''); // e.g., "c4" -> "c"
+      noteSpecificConfig = noteConfigs[noteNameWithoutOctave];
+    }
+
+    // If note-specific chord is defined, use it
+    if (noteSpecificConfig && noteSpecificConfig.chord) {
+      chordType = noteSpecificConfig.chord;
+    }
+  }
+
   let intervals = [];
 
   // Check if it's a custom numeric definition (e.g., "-2 0 1 4 7")
@@ -1106,6 +1435,14 @@ function getChordFrequencies(rootFrequency) {
 function frequencyToNoteName(frequency) {
   const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
   const midiNote = Math.round(12 * Math.log2(frequency / 440) + 69);
+  const octave = Math.floor(midiNote / 12) - 1;
+  const noteName = noteNames[midiNote % 12];
+  return `${noteName}${octave}`;
+}
+
+// Convert MIDI note number to note name (e.g., 60 -> C4)
+function midiNoteToNoteName(midiNote) {
+  const noteNames = ['c', 'c#', 'd', 'd#', 'e', 'f', 'f#', 'g', 'g#', 'a', 'a#', 'b'];
   const octave = Math.floor(midiNote / 12) - 1;
   const noteName = noteNames[midiNote % 12];
   return `${noteName}${octave}`;
@@ -1187,6 +1524,30 @@ function formatBlock(block) {
   if (oscMatch) {
     const oscName = oscMatch[1];
     content.innerHTML = `${leadingSpaces}<span class="syntax-key">oscillator</span> <span class="syntax-oscillator">${oscName}</span>`;
+    setCursorPositionInBlock(content, cursorPos);
+    return;
+  }
+
+  // Check if this is an LFO header line (e.g., "lfo slow")
+  const lfoMatch = trimmed.match(/^lfo\s+(.+)$/i);
+  if (lfoMatch) {
+    const lfoName = lfoMatch[1];
+    content.innerHTML = `${leadingSpaces}<span class="syntax-key">lfo</span> <span class="syntax-oscillator">${lfoName}</span>`;
+    setCursorPositionInBlock(content, cursorPos);
+    return;
+  }
+
+  // Check if this is a note header line (e.g., "note c3")
+  const noteMatch = trimmed.match(/^note\s+(.+)$/i);
+  if (noteMatch) {
+    const noteName = noteMatch[1];
+    content.innerHTML = `${leadingSpaces}<span class="syntax-key">note</span> <span class="syntax-oscillator">${noteName}</span>`;
+
+    // Preserve any trailing space after the note name
+    if (text.endsWith(' ') && !trimmed.endsWith(' ')) {
+      content.appendChild(document.createTextNode(' '));
+    }
+
     setCursorPositionInBlock(content, cursorPos);
     return;
   }
@@ -1348,6 +1709,7 @@ function initializeBlocks() {
       initialLines.push(`  attack time ${config.attack}`);
       initialLines.push(`  sustain level ${config.sustain * 100}`);
       initialLines.push(`  release time ${config.release}`);
+      initialLines.push(''); // Empty line between oscillators
     }
   });
 
@@ -2146,15 +2508,15 @@ function handleMIDIMessage(message) {
 
   if (status === 144 && velocity > 0) {
     // Note on - start all chord notes
-    const frequencies = getChordFrequencies(rootFrequency);
+    const frequencies = getChordFrequencies(rootFrequency, note);
     frequencies.forEach((freq, index) => {
       const noteId = `midi-${note}-${index}`;
       const isSynthetic = index > 0; // First note (index 0) is root, rest are synthetic
-      polyphonyManager.startNote(freq, noteId, velocity, isSynthetic);
+      polyphonyManager.startNote(freq, noteId, velocity, isSynthetic, note);
     });
   } else if (status === 128 || (status === 144 && velocity === 0)) {
     // Note off - stop all chord notes
-    const frequencies = getChordFrequencies(rootFrequency);
+    const frequencies = getChordFrequencies(rootFrequency, note);
     frequencies.forEach((freq, index) => {
       const noteId = `midi-${note}-${index}`;
       polyphonyManager.stopNote(noteId);
@@ -2204,12 +2566,12 @@ document.addEventListener("keydown", (e) => {
     activeKeys.add(key);
 
     const rootFrequency = 440 * Math.pow(2, (midiNote - 69) / 12);
-    const frequencies = getChordFrequencies(rootFrequency);
+    const frequencies = getChordFrequencies(rootFrequency, midiNote);
 
     frequencies.forEach((freq, index) => {
       const noteId = `keyboard-${key}-${index}`;
       const isSynthetic = index > 0; // First note (index 0) is root, rest are synthetic
-      polyphonyManager.startNote(freq, noteId, 100, isSynthetic);
+      polyphonyManager.startNote(freq, noteId, 100, isSynthetic, midiNote);
     });
   }
 });
@@ -2227,7 +2589,7 @@ document.addEventListener("keyup", (e) => {
     activeKeys.delete(key);
 
     const rootFrequency = 440 * Math.pow(2, (midiNote - 69) / 12);
-    const frequencies = getChordFrequencies(rootFrequency);
+    const frequencies = getChordFrequencies(rootFrequency, midiNote);
 
     frequencies.forEach((freq, index) => {
       const noteId = `keyboard-${key}-${index}`;
@@ -2248,6 +2610,9 @@ document.addEventListener("blur", (e) => {
 
 // Initialize application
 function initialize() {
+  // Initialize default oscillator names from variable_names
+  initializeDefaultOscillatorNames();
+
   // Build chord intervals from definitions
   buildChordIntervals();
 
@@ -2282,28 +2647,48 @@ const commandList = document.getElementById('command-list');
 let currentFontSize = 14; // Default from CSS
 let currentLineHeight = 1.6; // Default from CSS
 
+// Helper function to get a random unused name from variable_names
+function getRandomUnusedName(usedNames) {
+  // Shuffle the variable_names array to get random order
+  const shuffled = [...variable_names].sort(() => Math.random() - 0.5);
+
+  // Find first name that's not used
+  for (const name of shuffled) {
+    if (!usedNames.includes(name)) {
+      return name;
+    }
+  }
+
+  // If all names are used, fall back to numeric naming
+  let counter = 1;
+  while (usedNames.includes(`item${counter}`)) {
+    counter++;
+  }
+  return `item${counter}`;
+}
+
 // Command definitions
 const commands = [
   {
     name: "New Oscillator",
     description: "Create a new oscillator with default settings",
     action: () => {
-      // Generate a unique oscillator name
-      const existingOscillators = Array.from(parametersTextbox.querySelectorAll('.block-content'))
+      // Get all existing names (oscillators, LFOs, notes)
+      const existingNames = Array.from(parametersTextbox.querySelectorAll('.block-content'))
         .map(block => {
           const text = block.textContent.trim();
-          const match = text.match(/^oscillator\s+(.+)$/i);
-          return match ? match[1] : null;
+          const oscMatch = text.match(/^oscillator\s+(.+)$/i);
+          const lfoMatch = text.match(/^lfo\s+(.+)$/i);
+          const noteMatch = text.match(/^note\s+(.+)$/i);
+          if (oscMatch) return oscMatch[1];
+          if (lfoMatch) return lfoMatch[1];
+          if (noteMatch) return noteMatch[1];
+          return null;
         })
         .filter(name => name !== null);
 
-      // Find a unique number for the oscillator
-      let oscNumber = existingOscillators.length + 1;
-      let oscName = `${oscNumber}`;
-      while (existingOscillators.includes(oscName)) {
-        oscNumber++;
-        oscName = `${oscNumber}`;
-      }
+      // Get a random unused name
+      const oscName = getRandomUnusedName(existingNames);
 
       // Use the saved block from when slash was pressed
       const targetBlock = slashBlock;
@@ -2352,6 +2737,64 @@ const commands = [
       // Position cursor at the end of the oscillator name
       const oscContent = oscHeaderBlock.querySelector('.block-content');
       setCursorToEnd(oscContent);
+    }
+  },
+  {
+    name: "New LFO",
+    description: "Create a new LFO with default settings",
+    action: () => {
+      // Get all existing names (oscillators, LFOs, notes)
+      const existingNames = Array.from(parametersTextbox.querySelectorAll('.block-content'))
+        .map(block => {
+          const text = block.textContent.trim();
+          const oscMatch = text.match(/^oscillator\s+(.+)$/i);
+          const lfoMatch = text.match(/^lfo\s+(.+)$/i);
+          const noteMatch = text.match(/^note\s+(.+)$/i);
+          if (oscMatch) return oscMatch[1];
+          if (lfoMatch) return lfoMatch[1];
+          if (noteMatch) return noteMatch[1];
+          return null;
+        })
+        .filter(name => name !== null);
+
+      // Get a random unused name
+      const lfoName = getRandomUnusedName(existingNames);
+
+      // Use the saved block from when slash was pressed
+      const targetBlock = slashBlock;
+
+      // Create the new LFO blocks
+      const lfoHeaderBlock = createBlock(`lfo ${lfoName}`);
+      const rateBlock = createBlock(`  rate 5`);
+      const depthBlock = createBlock(`  depth 10`);
+      const waveBlock = createBlock(`  wave sine`);
+
+      // Insert the blocks
+      if (targetBlock) {
+        // Insert after the current block (in reverse order)
+        targetBlock.insertAdjacentElement('afterend', waveBlock);
+        targetBlock.insertAdjacentElement('afterend', depthBlock);
+        targetBlock.insertAdjacentElement('afterend', rateBlock);
+        targetBlock.insertAdjacentElement('afterend', lfoHeaderBlock);
+      } else {
+        // Append to the end
+        parametersTextbox.appendChild(lfoHeaderBlock);
+        parametersTextbox.appendChild(rateBlock);
+        parametersTextbox.appendChild(depthBlock);
+        parametersTextbox.appendChild(waveBlock);
+      }
+
+      // Format and sync
+      formatBlock(lfoHeaderBlock);
+      formatBlock(rateBlock);
+      formatBlock(depthBlock);
+      formatBlock(waveBlock);
+
+      syncUIFromText();
+
+      // Position cursor at the end of the LFO name
+      const lfoContent = lfoHeaderBlock.querySelector('.block-content');
+      setCursorToEnd(lfoContent);
     }
   },
   {
