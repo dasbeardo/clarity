@@ -40,6 +40,7 @@
  *
  * Global defaults:
  * - master volume: 80 (0.8 for audio)
+ * - filter: frequency 20000 (fully open), resonance 1
  * - compressor: threshold -20, ratio 12, knee 30, attack 0.003, release 0.25
  *
  * ============================================================================
@@ -69,6 +70,10 @@ let variables = {};
 // Format: { name: { rate, depth, wave } }
 let lfoConfigs = {};
 
+// Named envelope configurations - dynamically updated from text box
+// Format: { name: { attack, decay, sustain, release } }
+let envelopeConfigs = {};
+
 // Note-specific configurations - dynamically updated from text box
 // Format: { noteName: { pitch: lfoName } }
 let noteConfigs = {};
@@ -82,8 +87,15 @@ let globalConfig = {
   masterVolume: { value: 0.8, isDefault: true },
   masterEnvelope: {
     attack: { value: 100, isDefault: true },
+    decay: { value: 100, isDefault: true },
     sustain: { value: 1.0, isDefault: true },
     release: { value: 500, isDefault: true }
+  },
+  filter: {
+    frequency: { value: 20000, isDefault: true },
+    resonance: { value: 1, isDefault: true },
+    frequencyEnvelope: { value: null, isDefault: true },
+    resonanceEnvelope: { value: null, isDefault: true }
   },
   compressor: {
     threshold: { value: -20, isDefault: true },
@@ -122,6 +134,7 @@ const PARAMETER_KEYS = [
   'volume',
   'pitch',
   'attack time',
+  'decay time',
   'sustain level',
   'release time',
   'master volume',
@@ -130,6 +143,10 @@ const PARAMETER_KEYS = [
   'knee',
   'attack',
   'release',
+  'filter frequency',
+  'filter resonance',
+  'frequency envelope',
+  'resonance envelope',
   'compressor threshold',
   'compressor ratio',
   'compressor knee',
@@ -405,6 +422,7 @@ function createMasterEnvelopeSection() {
   header.textContent = 'envelope';
   // Mark as default if ALL envelope params are default
   const allDefault = globalConfig.masterEnvelope.attack.isDefault &&
+                      globalConfig.masterEnvelope.decay.isDefault &&
                       globalConfig.masterEnvelope.sustain.isDefault &&
                       globalConfig.masterEnvelope.release.isDefault;
   if (allDefault) {
@@ -432,6 +450,26 @@ function createMasterEnvelopeSection() {
   attackContainer.appendChild(attackLabel);
   attackContainer.appendChild(attackSlider);
   section.appendChild(attackContainer);
+
+  // Decay
+  const decayContainer = document.createElement('div');
+  decayContainer.className = 'slider-container';
+  const decayLabel = document.createElement('label');
+  decayLabel.textContent = 'decay time (ms)';
+  const decaySlider = document.createElement('input');
+  decaySlider.type = 'range';
+  decaySlider.min = '0';
+  decaySlider.max = '2000';
+  decaySlider.step = '10';
+  decaySlider.value = globalConfig.masterEnvelope.decay.value;
+  decaySlider.addEventListener('input', () => {
+    if (!isUpdatingFromText) {
+      updateParameterInBlocks('envelope decay time', decaySlider.value);
+    }
+  });
+  decayContainer.appendChild(decayLabel);
+  decayContainer.appendChild(decaySlider);
+  section.appendChild(decayContainer);
 
   // Sustain
   const sustainContainer = document.createElement('div');
@@ -514,6 +552,68 @@ function createVariablesSection() {
     container.appendChild(slider);
     section.appendChild(container);
   });
+
+  return section;
+}
+
+// Create a filter section with controls
+function createFilterSection() {
+  const section = document.createElement('div');
+  section.className = 'controls-section';
+  section.id = 'filter-section';
+
+  const header = document.createElement('h2');
+  header.textContent = 'filter';
+  // Mark as default if ALL filter params are default
+  const allDefault = globalConfig.filter.frequency.isDefault &&
+                      globalConfig.filter.resonance.isDefault;
+  if (allDefault) {
+    header.classList.add('default-param');
+    header.title = 'Using default values (not in document)';
+  }
+  section.appendChild(header);
+
+  // Frequency
+  const frequencyContainer = document.createElement('div');
+  frequencyContainer.className = 'slider-container';
+  const frequencyLabel = document.createElement('label');
+  frequencyLabel.textContent = 'frequency';
+  const frequencySlider = document.createElement('input');
+  frequencySlider.type = 'range';
+  frequencySlider.min = '20';
+  frequencySlider.max = '20000';
+  frequencySlider.step = '1';
+  frequencySlider.value = globalConfig.filter.frequency.value;
+  frequencySlider.addEventListener('input', () => {
+    if (!isUpdatingFromText) {
+      updateParameterInBlocks('filter frequency', frequencySlider.value);
+    }
+    filter.frequency.value = parseFloat(frequencySlider.value);
+  });
+  frequencyContainer.appendChild(frequencyLabel);
+  frequencyContainer.appendChild(frequencySlider);
+  section.appendChild(frequencyContainer);
+
+  // Resonance (Q factor)
+  const resonanceContainer = document.createElement('div');
+  resonanceContainer.className = 'slider-container';
+  const resonanceLabel = document.createElement('label');
+  resonanceLabel.textContent = 'resonance';
+  const resonanceSlider = document.createElement('input');
+  resonanceSlider.type = 'range';
+  resonanceSlider.min = '0.0001';
+  resonanceSlider.max = '20';
+  resonanceSlider.step = '0.1';
+  resonanceSlider.value = globalConfig.filter.resonance.value;
+  resonanceSlider.addEventListener('input', () => {
+    if (!isUpdatingFromText) {
+      updateParameterInBlocks('filter resonance', resonanceSlider.value);
+    }
+    filter.Q.value = parseFloat(resonanceSlider.value);
+  });
+  resonanceContainer.appendChild(resonanceLabel);
+  resonanceContainer.appendChild(resonanceSlider);
+  section.appendChild(resonanceContainer);
 
   return section;
 }
@@ -878,6 +978,144 @@ function createLFOSection(name, config) {
   return section;
 }
 
+// Create a named envelope section with controls
+function createNamedEnvelopeSection(name, config) {
+  const section = document.createElement('div');
+  section.className = 'controls-section';
+  section.dataset.envelopeName = name;
+
+  const header = document.createElement('h2');
+  header.textContent = `envelope ${name}`;
+  section.appendChild(header);
+
+  // Attack time slider
+  const attackContainer = document.createElement('div');
+  attackContainer.className = 'slider-container';
+  const attackLabel = document.createElement('label');
+  attackLabel.textContent = 'attack time';
+  const attackSlider = document.createElement('input');
+  attackSlider.type = 'range';
+  attackSlider.min = '0';
+  attackSlider.max = '2000';
+  attackSlider.step = '10';
+  attackSlider.value = config.attack;
+  attackSlider.addEventListener('input', () => {
+    if (!isUpdatingFromText) {
+      updateEnvelopeParameterInBlocks(name, 'attack time', attackSlider.value);
+    }
+  });
+  attackContainer.appendChild(attackLabel);
+  attackContainer.appendChild(attackSlider);
+  section.appendChild(attackContainer);
+
+  // Decay time slider
+  const decayContainer = document.createElement('div');
+  decayContainer.className = 'slider-container';
+  const decayLabel = document.createElement('label');
+  decayLabel.textContent = 'decay time';
+  const decaySlider = document.createElement('input');
+  decaySlider.type = 'range';
+  decaySlider.min = '0';
+  decaySlider.max = '2000';
+  decaySlider.step = '10';
+  decaySlider.value = config.decay;
+  decaySlider.addEventListener('input', () => {
+    if (!isUpdatingFromText) {
+      updateEnvelopeParameterInBlocks(name, 'decay time', decaySlider.value);
+    }
+  });
+  decayContainer.appendChild(decayLabel);
+  decayContainer.appendChild(decaySlider);
+  section.appendChild(decayContainer);
+
+  // Sustain level slider
+  const sustainContainer = document.createElement('div');
+  sustainContainer.className = 'slider-container';
+  const sustainLabel = document.createElement('label');
+  sustainLabel.textContent = 'sustain level';
+  const sustainSlider = document.createElement('input');
+  sustainSlider.type = 'range';
+  sustainSlider.min = '0';
+  sustainSlider.max = '100';
+  sustainSlider.step = '1';
+  sustainSlider.value = config.sustain * 100; // Convert 0-1 to 0-100
+  sustainSlider.addEventListener('input', () => {
+    if (!isUpdatingFromText) {
+      updateEnvelopeParameterInBlocks(name, 'sustain level', sustainSlider.value);
+    }
+  });
+  sustainContainer.appendChild(sustainLabel);
+  sustainContainer.appendChild(sustainSlider);
+  section.appendChild(sustainContainer);
+
+  // Release time slider
+  const releaseContainer = document.createElement('div');
+  releaseContainer.className = 'slider-container';
+  const releaseLabel = document.createElement('label');
+  releaseLabel.textContent = 'release time';
+  const releaseSlider = document.createElement('input');
+  releaseSlider.type = 'range';
+  releaseSlider.min = '0';
+  releaseSlider.max = '5000';
+  releaseSlider.step = '50';
+  releaseSlider.value = config.release;
+  releaseSlider.addEventListener('input', () => {
+    if (!isUpdatingFromText) {
+      updateEnvelopeParameterInBlocks(name, 'release time', releaseSlider.value);
+    }
+  });
+  releaseContainer.appendChild(releaseLabel);
+  releaseContainer.appendChild(releaseSlider);
+  section.appendChild(releaseContainer);
+
+  return section;
+}
+
+// Update envelope parameter in text blocks
+function updateEnvelopeParameterInBlocks(envelopeName, parameterName, value) {
+  const blocks = Array.from(parametersTextbox.querySelectorAll('.block'));
+  let inEnvelope = false;
+  let envelopeBlock = null;
+
+  for (const block of blocks) {
+    const content = block.querySelector('.block-content');
+    if (!content) continue;
+
+    const text = content.textContent;
+
+    // Check if this is the envelope header we're looking for
+    const envelopeMatch = text.match(/^envelope\s+(.+)$/i);
+    if (envelopeMatch && envelopeMatch[1].trim() === envelopeName) {
+      inEnvelope = true;
+      envelopeBlock = block;
+      continue;
+    }
+
+    // If we hit another non-indented line, we've left the envelope block
+    if (!text.startsWith('  ')) {
+      inEnvelope = false;
+    }
+
+    // If we're in the right envelope block and this is the parameter line
+    if (inEnvelope && text.trim().startsWith(parameterName + ' ')) {
+      content.textContent = `  ${parameterName} ${value}`;
+      formatBlock(block);
+      scrollToAndPulse(block, true);
+      syncUIFromText();
+      return;
+    }
+  }
+
+  // If we didn't find the parameter, add it after the envelope header
+  if (envelopeBlock) {
+    const newBlock = createBlock(`  ${parameterName} ${value}`);
+    envelopeBlock.insertAdjacentElement('afterend', newBlock);
+    formatBlock(newBlock);
+    scrollToAndPulse(newBlock, true);
+    syncUIFromText();
+  }
+}
+
 // Update LFO parameter in text blocks
 function updateLFOParameterInBlocks(lfoName, parameterName, value) {
   const blocks = Array.from(parametersTextbox.querySelectorAll('.block'));
@@ -936,6 +1174,10 @@ function syncUIFromText() {
   const lfosByName = new Map();
   let currentLFOName = null;
 
+  // Track named envelopes by name in order of appearance
+  const envelopesByName = new Map();
+  let currentEnvelopeName = null;
+
   // Track notes by name
   const notesByName = new Map();
   let currentNoteName = null;
@@ -953,6 +1195,9 @@ function syncUIFromText() {
   // Reset LFO configs
   lfoConfigs = {};
 
+  // Reset envelope configs
+  envelopeConfigs = {};
+
   // Reset note configs
   noteConfigs = {};
 
@@ -964,8 +1209,15 @@ function syncUIFromText() {
     masterVolume: { value: 0.8, isDefault: true },
     masterEnvelope: {
       attack: { value: 100, isDefault: true },
+      decay: { value: 100, isDefault: true },
       sustain: { value: 1.0, isDefault: true },
       release: { value: 500, isDefault: true }
+    },
+    filter: {
+      frequency: { value: 20000, isDefault: true },
+      resonance: { value: 1, isDefault: true },
+      frequencyEnvelope: { value: null, isDefault: true },
+      resonanceEnvelope: { value: null, isDefault: true }
     },
     compressor: {
       threshold: { value: -20, isDefault: true },
@@ -1053,6 +1305,26 @@ function syncUIFromText() {
       return;
     }
 
+    // Check if this is a named envelope heading (not indented, starts with "envelope ")
+    const envelopeMatch = line.match(/^envelope\s+(.+)$/i);
+    if (envelopeMatch) {
+      currentEnvelopeName = envelopeMatch[1].trim();
+      currentOscillatorName = null;
+      currentLFOName = null;
+      currentNoteName = null;
+      currentKeyChar = null;
+      currentSection = null;
+      if (!envelopesByName.has(currentEnvelopeName)) {
+        envelopesByName.set(currentEnvelopeName, {
+          attack: null,
+          decay: null,
+          sustain: null,
+          release: null
+        });
+      }
+      return;
+    }
+
     // Check for new global section headers (master, envelope, compressor, global)
     if (line.match(/^master$/i)) {
       currentSection = 'master';
@@ -1060,11 +1332,22 @@ function syncUIFromText() {
       currentLFOName = null;
       currentNoteName = null;
       currentKeyChar = null;
+      currentEnvelopeName = null;
       return;
     }
 
     if (line.match(/^envelope$/i)) {
       currentSection = 'envelope';
+      currentOscillatorName = null;
+      currentLFOName = null;
+      currentNoteName = null;
+      currentKeyChar = null;
+      currentEnvelopeName = null;
+      return;
+    }
+
+    if (line.match(/^filter$/i)) {
+      currentSection = 'filter';
       currentOscillatorName = null;
       currentLFOName = null;
       currentNoteName = null;
@@ -1130,6 +1413,16 @@ function syncUIFromText() {
         if (matchedKey === 'wave') lfo.wave = value;
       }
 
+      // If we're in a named envelope block
+      if (currentEnvelopeName) {
+        const envelope = envelopesByName.get(currentEnvelopeName);
+
+        if (matchedKey === 'attack time') envelope.attack = resolveValue(value);
+        if (matchedKey === 'decay time') envelope.decay = resolveValue(value);
+        if (matchedKey === 'sustain level') envelope.sustain = resolveValue(value) / 100;
+        if (matchedKey === 'release time') envelope.release = resolveValue(value);
+      }
+
       // If we're in a note block (currentNoteName is an array of note names)
       if (currentNoteName) {
         currentNoteName.forEach(noteName => {
@@ -1172,6 +1465,12 @@ function syncUIFromText() {
             isDefault: false
           };
         }
+        if (matchedKey === 'decay time') {
+          globalConfig.masterEnvelope.decay = {
+            value: parseFloat(value),
+            isDefault: false
+          };
+        }
         if (matchedKey === 'sustain level') {
           globalConfig.masterEnvelope.sustain = {
             value: parseFloat(value) / 100,
@@ -1181,6 +1480,33 @@ function syncUIFromText() {
         if (matchedKey === 'release time') {
           globalConfig.masterEnvelope.release = {
             value: parseFloat(value),
+            isDefault: false
+          };
+        }
+      }
+
+      if (currentSection === 'filter') {
+        if (matchedKey === 'filter frequency') {
+          globalConfig.filter.frequency = {
+            value: parseFloat(value),
+            isDefault: false
+          };
+        }
+        if (matchedKey === 'filter resonance') {
+          globalConfig.filter.resonance = {
+            value: parseFloat(value),
+            isDefault: false
+          };
+        }
+        if (matchedKey === 'frequency envelope') {
+          globalConfig.filter.frequencyEnvelope = {
+            value: value,
+            isDefault: false
+          };
+        }
+        if (matchedKey === 'resonance envelope') {
+          globalConfig.filter.resonanceEnvelope = {
+            value: value,
             isDefault: false
           };
         }
@@ -1298,6 +1624,16 @@ function syncUIFromText() {
     };
   });
 
+  // Populate envelopeConfigs from parsed named envelopes
+  envelopesByName.forEach((envelope, name) => {
+    envelopeConfigs[name] = {
+      attack: envelope.attack !== null ? envelope.attack : 100,
+      decay: envelope.decay !== null ? envelope.decay : 100,
+      sustain: envelope.sustain !== null ? envelope.sustain : 1.0,
+      release: envelope.release !== null ? envelope.release : 500
+    };
+  });
+
   // Populate noteConfigs from parsed notes
   notesByName.forEach((note, name) => {
     noteConfigs[name] = {
@@ -1316,52 +1652,13 @@ function syncUIFromText() {
   // Update visual keyboard to highlight keys with definitions
   updateKeyboardHighlights();
 
-  // Dynamically generate UI sections for ALL oscillators AND global parameters
-  const oscillatorsContainer = document.getElementById('oscillators-container');
-  if (oscillatorsContainer) {
-    // Clear ALL existing sections
-    oscillatorsContainer.innerHTML = '';
-
-    // Create a section for each oscillator (with defaults applied)
-    oscillatorConfigs.forEach((config, index) => {
-      const name = oscillatorNames[index];
-      const section = createOscillatorSection(name, index, config);
-      oscillatorsContainer.appendChild(section);
-    });
-
-    // Create a section for each LFO
-    Object.entries(lfoConfigs).forEach(([name, config]) => {
-      const section = createLFOSection(name, config);
-      oscillatorsContainer.appendChild(section);
-    });
-
-    // Create master volume section
-    const masterVolumeSection = createMasterVolumeSection();
-    oscillatorsContainer.appendChild(masterVolumeSection);
-
-    // Create master envelope section
-    const masterEnvelopeSection = createMasterEnvelopeSection();
-    oscillatorsContainer.appendChild(masterEnvelopeSection);
-
-    // Create compressor section
-    const compressorSection = createCompressorSection();
-    oscillatorsContainer.appendChild(compressorSection);
-
-    // Create global section (includes chord and global detune)
-    const globalSection = createGlobalSection();
-    oscillatorsContainer.appendChild(globalSection);
-
-    // Create variables section (if there are any variables)
-    const variablesSection = createVariablesSection();
-    if (variablesSection) {
-      oscillatorsContainer.appendChild(variablesSection);
-    }
-
-    // Virtual keyboard is now defined in HTML, no need to create it dynamically
-  }
+  // Update UI for current block (will be called by cursor tracking)
+  updateUIForCurrentBlock();
 
   // Apply global config to audio engine
   masterGain.gain.value = globalConfig.masterVolume.value;
+  filter.frequency.value = globalConfig.filter.frequency.value;
+  filter.Q.value = globalConfig.filter.resonance.value;
   compressor.threshold.value = globalConfig.compressor.threshold.value;
   compressor.ratio.value = globalConfig.compressor.ratio.value;
   compressor.knee.value = globalConfig.compressor.knee.value;
@@ -1373,6 +1670,200 @@ function syncUIFromText() {
   if (oldConfigJSON !== newConfigJSON) {
     polyphonyManager.stopAllNotes();
   }
+}
+
+// Update UI to show only controls for the current block
+function updateUIForCurrentBlock() {
+  const oscillatorsContainer = document.getElementById('oscillators-container');
+  if (!oscillatorsContainer) return;
+
+  // Get the current block
+  const currentBlock = getCurrentBlock();
+  if (!currentBlock) {
+    // No block selected - clear UI
+    oscillatorsContainer.innerHTML = '<div style="padding: 20px; color: #969896; text-align: center;">Click on a line to see its controls</div>';
+    return;
+  }
+
+  const blockContent = currentBlock.querySelector('.block-content');
+  if (!blockContent) {
+    oscillatorsContainer.innerHTML = '<div style="padding: 20px; color: #969896; text-align: center;">Click on a line to see its controls</div>';
+    return;
+  }
+
+  const text = blockContent.textContent.trim();
+
+  // Clear existing UI
+  oscillatorsContainer.innerHTML = '';
+
+  // Check what type of block this is and generate appropriate UI
+
+  // Check for oscillator
+  const oscMatch = text.match(/^oscillator\s+(.+)$/i);
+  if (oscMatch) {
+    const oscName = oscMatch[1];
+    const oscIndex = oscillatorNames.indexOf(oscName);
+    if (oscIndex >= 0 && oscIndex < oscillatorConfigs.length) {
+      const config = oscillatorConfigs[oscIndex];
+      const section = createOscillatorSection(oscName, oscIndex, config);
+      oscillatorsContainer.appendChild(section);
+    }
+    return;
+  }
+
+  // Check for LFO
+  const lfoMatch = text.match(/^lfo\s+(.+)$/i);
+  if (lfoMatch) {
+    const lfoName = lfoMatch[1];
+    if (lfoConfigs[lfoName]) {
+      const section = createLFOSection(lfoName, lfoConfigs[lfoName]);
+      oscillatorsContainer.appendChild(section);
+    }
+    return;
+  }
+
+  // Check for named envelope
+  const namedEnvelopeMatch = text.match(/^envelope\s+(.+)$/i);
+  if (namedEnvelopeMatch) {
+    const envelopeName = namedEnvelopeMatch[1];
+    if (envelopeConfigs[envelopeName]) {
+      const section = createNamedEnvelopeSection(envelopeName, envelopeConfigs[envelopeName]);
+      oscillatorsContainer.appendChild(section);
+    }
+    return;
+  }
+
+  // Check for master section
+  if (text.match(/^master$/i)) {
+    const section = createMasterVolumeSection();
+    oscillatorsContainer.appendChild(section);
+    return;
+  }
+
+  // Check for envelope section
+  if (text.match(/^envelope$/i)) {
+    const section = createMasterEnvelopeSection();
+    oscillatorsContainer.appendChild(section);
+    return;
+  }
+
+  // Check for filter section
+  if (text.match(/^filter$/i)) {
+    const section = createFilterSection();
+    oscillatorsContainer.appendChild(section);
+    return;
+  }
+
+  // Check for compressor section
+  if (text.match(/^compressor$/i)) {
+    const section = createCompressorSection();
+    oscillatorsContainer.appendChild(section);
+    return;
+  }
+
+  // Check for global section
+  if (text.match(/^global$/i)) {
+    const section = createGlobalSection();
+    oscillatorsContainer.appendChild(section);
+    return;
+  }
+
+  // Check for variable
+  if (text.match(/^variable\s+/i)) {
+    const section = createVariablesSection();
+    if (section) {
+      oscillatorsContainer.appendChild(section);
+    }
+    return;
+  }
+
+  // Check for note or key - these don't have their own UI sections currently
+  if (text.match(/^note\s+/i) || text.match(/^key\s+/i)) {
+    oscillatorsContainer.innerHTML = '<div style="padding: 20px; color: #969896; text-align: center;">Note and key blocks don\'t have UI controls</div>';
+    return;
+  }
+
+  // Check if this is a parameter line (indented) - find parent block
+  if (text && blockContent.textContent.startsWith('  ')) {
+    // This is an indented parameter line - find the parent block
+    let parentBlock = currentBlock.previousElementSibling;
+    while (parentBlock && parentBlock.classList.contains('block')) {
+      const parentContent = parentBlock.querySelector('.block-content');
+      if (parentContent && !parentContent.textContent.startsWith('  ')) {
+        // Found parent - generate UI for parent
+        const parentTextContent = parentContent.textContent.trim();
+
+        // Check parent type and generate UI
+        const parentOscMatch = parentTextContent.match(/^oscillator\s+(.+)$/i);
+        if (parentOscMatch) {
+          const oscName = parentOscMatch[1];
+          const oscIndex = oscillatorNames.indexOf(oscName);
+          if (oscIndex >= 0 && oscIndex < oscillatorConfigs.length) {
+            const config = oscillatorConfigs[oscIndex];
+            const section = createOscillatorSection(oscName, oscIndex, config);
+            oscillatorsContainer.appendChild(section);
+          }
+          return;
+        }
+
+        const parentLfoMatch = parentTextContent.match(/^lfo\s+(.+)$/i);
+        if (parentLfoMatch) {
+          const lfoName = parentLfoMatch[1];
+          if (lfoConfigs[lfoName]) {
+            const section = createLFOSection(lfoName, lfoConfigs[lfoName]);
+            oscillatorsContainer.appendChild(section);
+          }
+          return;
+        }
+
+        const parentEnvelopeMatch = parentTextContent.match(/^envelope\s+(.+)$/i);
+        if (parentEnvelopeMatch) {
+          const envelopeName = parentEnvelopeMatch[1];
+          if (envelopeConfigs[envelopeName]) {
+            const section = createNamedEnvelopeSection(envelopeName, envelopeConfigs[envelopeName]);
+            oscillatorsContainer.appendChild(section);
+          }
+          return;
+        }
+
+        if (parentTextContent.match(/^master$/i)) {
+          const section = createMasterVolumeSection();
+          oscillatorsContainer.appendChild(section);
+          return;
+        }
+
+        if (parentTextContent.match(/^envelope$/i)) {
+          const section = createMasterEnvelopeSection();
+          oscillatorsContainer.appendChild(section);
+          return;
+        }
+
+        if (parentTextContent.match(/^filter$/i)) {
+          const section = createFilterSection();
+          oscillatorsContainer.appendChild(section);
+          return;
+        }
+
+        if (parentTextContent.match(/^compressor$/i)) {
+          const section = createCompressorSection();
+          oscillatorsContainer.appendChild(section);
+          return;
+        }
+
+        if (parentTextContent.match(/^global$/i)) {
+          const section = createGlobalSection();
+          oscillatorsContainer.appendChild(section);
+          return;
+        }
+
+        break;
+      }
+      parentBlock = parentBlock.previousElementSibling;
+    }
+  }
+
+  // Default - no matching block type
+  oscillatorsContainer.innerHTML = '<div style="padding: 20px; color: #969896; text-align: center;">No controls for this block</div>';
 }
 
 // Polyphony Manager to track active notes
@@ -1516,18 +2007,67 @@ class Note {
         this.configs.push(config);
       }
     });
+
+    // Create filter envelope modulators if configured
+    this.filterEnvelopes = [];
+
+    // Frequency envelope modulation
+    if (globalConfig.filter.frequencyEnvelope.value && envelopeConfigs[globalConfig.filter.frequencyEnvelope.value]) {
+      const envConfig = envelopeConfigs[globalConfig.filter.frequencyEnvelope.value];
+
+      // Create a ConstantSourceNode to generate a DC offset
+      const constantSource = audioContext.createConstantSource();
+      constantSource.offset.value = globalConfig.filter.frequency.value;
+
+      // Create gain node for envelope shaping
+      const envelopeGain = audioContext.createGain();
+      envelopeGain.gain.setValueAtTime(0, audioContext.currentTime);
+
+      // Connect: constant source → envelope gain → filter frequency
+      constantSource.connect(envelopeGain);
+      envelopeGain.connect(filter.frequency);
+
+      constantSource.start();
+
+      this.filterEnvelopes.push({ type: 'frequency', constantSource, envelopeGain, config: envConfig });
+    }
+
+    // Resonance envelope modulation
+    if (globalConfig.filter.resonanceEnvelope.value && envelopeConfigs[globalConfig.filter.resonanceEnvelope.value]) {
+      const envConfig = envelopeConfigs[globalConfig.filter.resonanceEnvelope.value];
+
+      // Create a ConstantSourceNode
+      const constantSource = audioContext.createConstantSource();
+      constantSource.offset.value = globalConfig.filter.resonance.value;
+
+      // Create gain node for envelope shaping
+      const envelopeGain = audioContext.createGain();
+      envelopeGain.gain.setValueAtTime(0, audioContext.currentTime);
+
+      // Connect: constant source → envelope gain → filter Q
+      constantSource.connect(envelopeGain);
+      envelopeGain.connect(filter.Q);
+
+      constantSource.start();
+
+      this.filterEnvelopes.push({ type: 'resonance', constantSource, envelopeGain, config: envConfig });
+    }
   }
 
   start(velocity = 127) {
     const normalizedVelocity = velocity / 127;
 
-    // Apply master envelope
+    // Apply master envelope with ADSR
     const masterAttackTime = globalConfig.masterEnvelope.attack.value / 1000;
+    const masterDecayTime = globalConfig.masterEnvelope.decay.value / 1000;
     const masterSustainLevel = globalConfig.masterEnvelope.sustain.value;
-    const masterMaxAmplitude = normalizedVelocity * masterSustainLevel;
+    const masterSustainAmplitude = normalizedVelocity * masterSustainLevel;
 
+    // A: Attack - ramp from 0 to peak (full velocity)
     this.masterEnvelopeGain.gain.setValueAtTime(0, audioContext.currentTime);
-    this.masterEnvelopeGain.gain.linearRampToValueAtTime(masterMaxAmplitude, audioContext.currentTime + masterAttackTime);
+    this.masterEnvelopeGain.gain.linearRampToValueAtTime(normalizedVelocity, audioContext.currentTime + masterAttackTime);
+    // D: Decay - ramp from peak to sustain level
+    this.masterEnvelopeGain.gain.linearRampToValueAtTime(masterSustainAmplitude, audioContext.currentTime + masterAttackTime + masterDecayTime);
 
     // Start each oscillator with its own envelope
     this.oscillators.forEach((osc, index) => {
@@ -1543,6 +2083,21 @@ class Note {
       envelopeGain.gain.linearRampToValueAtTime(maxAmplitude, audioContext.currentTime + attackTime);
 
       osc.start();
+    });
+
+    // Apply filter envelopes (ADSR)
+    this.filterEnvelopes.forEach(({ envelopeGain, config }) => {
+      const attackTime = config.attack / 1000;
+      const decayTime = config.decay / 1000;
+      const sustainLevel = config.sustain;
+      const sustainAmplitude = normalizedVelocity * sustainLevel;
+
+      // ADSR envelope
+      envelopeGain.gain.setValueAtTime(0, audioContext.currentTime);
+      // Attack: ramp to peak
+      envelopeGain.gain.linearRampToValueAtTime(normalizedVelocity, audioContext.currentTime + attackTime);
+      // Decay: ramp to sustain level
+      envelopeGain.gain.linearRampToValueAtTime(sustainAmplitude, audioContext.currentTime + attackTime + decayTime);
     });
   }
 
@@ -1560,6 +2115,16 @@ class Note {
     // Apply release envelope to each oscillator
     this.oscillatorEnvelopes.forEach((envelopeGain, index) => {
       const config = this.configs[index];
+      const releaseTime = config.release / 1000;
+      maxIndividualReleaseTime = Math.max(maxIndividualReleaseTime, releaseTime);
+
+      envelopeGain.gain.cancelScheduledValues(audioContext.currentTime);
+      envelopeGain.gain.setValueAtTime(envelopeGain.gain.value, audioContext.currentTime);
+      envelopeGain.gain.linearRampToValueAtTime(0, audioContext.currentTime + releaseTime);
+    });
+
+    // Apply release envelope to filter envelopes
+    this.filterEnvelopes.forEach(({ envelopeGain, config }) => {
       const releaseTime = config.release / 1000;
       maxIndividualReleaseTime = Math.max(maxIndividualReleaseTime, releaseTime);
 
@@ -1613,6 +2178,17 @@ class Note {
       if (this.masterEnvelopeGain) {
         this.masterEnvelopeGain.disconnect();
       }
+
+      // Stop and disconnect filter envelopes
+      this.filterEnvelopes.forEach(({ constantSource, envelopeGain }) => {
+        if (constantSource) {
+          constantSource.stop();
+          constantSource.disconnect();
+        }
+        if (envelopeGain) {
+          envelopeGain.disconnect();
+        }
+      });
     }, totalReleaseTime * 1000);
   }
 
@@ -1671,6 +2247,12 @@ const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 const masterGain = audioContext.createGain();
 masterGain.gain.value = 0.8;
 
+// Add low-pass filter
+const filter = audioContext.createBiquadFilter();
+filter.type = 'lowpass';
+filter.frequency.value = 20000;  // 20kHz - fully open by default
+filter.Q.value = 1;              // Resonance (Q factor)
+
 // Add compressor to prevent clipping
 const compressor = audioContext.createDynamicsCompressor();
 compressor.threshold.value = -20;  // Start compressing at -20dB
@@ -1679,8 +2261,9 @@ compressor.ratio.value = 12;       // Heavy compression ratio
 compressor.attack.value = 0.003;   // Fast attack (3ms)
 compressor.release.value = 0.25;   // Quick release (250ms)
 
-// Connect: masterGain → compressor → destination
-masterGain.connect(compressor);
+// Connect: masterGain → filter → compressor → destination
+masterGain.connect(filter);
+filter.connect(compressor);
 compressor.connect(audioContext.destination);
 
 // DOM Elements
@@ -1846,6 +2429,15 @@ function formatBlock(block) {
     return;
   }
 
+  // Check if this is a named envelope header line (e.g., "envelope sweep")
+  const namedEnvelopeMatch = trimmed.match(/^envelope\s+(.+)$/i);
+  if (namedEnvelopeMatch) {
+    const envelopeName = namedEnvelopeMatch[1];
+    content.innerHTML = `${leadingSpaces}<span class="syntax-key">envelope</span> <span class="syntax-oscillator">${envelopeName}</span>`;
+    setCursorPositionInBlock(content, cursorPos);
+    return;
+  }
+
   // Check if this is a note header line (e.g., "note c3")
   const noteMatch = trimmed.match(/^note\s+(.+)$/i);
   if (noteMatch) {
@@ -1886,6 +2478,13 @@ function formatBlock(block) {
   // Check if this is an envelope section header
   if (trimmed.match(/^envelope$/i)) {
     content.innerHTML = `${leadingSpaces}<span class="syntax-key">envelope</span>`;
+    setCursorPositionInBlock(content, cursorPos);
+    return;
+  }
+
+  // Check if this is a filter section header
+  if (trimmed.match(/^filter$/i)) {
+    content.innerHTML = `${leadingSpaces}<span class="syntax-key">filter</span>`;
     setCursorPositionInBlock(content, cursorPos);
     return;
   }
@@ -2057,6 +2656,7 @@ function initializeBlocks() {
 
   initialLines.push('envelope');
   initialLines.push(`  attack time ${globalConfig.masterEnvelope.attack.value}`);
+  initialLines.push(`  decay time ${globalConfig.masterEnvelope.decay.value}`);
   initialLines.push(`  sustain level ${globalConfig.masterEnvelope.sustain.value * 100}`);
   initialLines.push(`  release time ${globalConfig.masterEnvelope.release.value}`);
   initialLines.push('');
@@ -2197,12 +2797,23 @@ function updateParameterInBlocks(parameterName, newValue, oscIndex = -1) {
             if (parameterName === 'envelope attack time' && nextTrimmed.startsWith('attack time ')) {
               shouldUpdate = true;
               nextContent.textContent = `  attack time ${newValue}`;
+            } else if (parameterName === 'envelope decay time' && nextTrimmed.startsWith('decay time ')) {
+              shouldUpdate = true;
+              nextContent.textContent = `  decay time ${newValue}`;
             } else if (parameterName === 'envelope sustain level' && nextTrimmed.startsWith('sustain level ')) {
               shouldUpdate = true;
               nextContent.textContent = `  sustain level ${newValue}`;
             } else if (parameterName === 'envelope release time' && nextTrimmed.startsWith('release time ')) {
               shouldUpdate = true;
               nextContent.textContent = `  release time ${newValue}`;
+            }
+          } else if (sectionType === 'filter') {
+            if (parameterName === 'filter frequency' && nextTrimmed.startsWith('filter frequency ')) {
+              shouldUpdate = true;
+              nextContent.textContent = `  filter frequency ${newValue}`;
+            } else if (parameterName === 'filter resonance' && nextTrimmed.startsWith('filter resonance ')) {
+              shouldUpdate = true;
+              nextContent.textContent = `  filter resonance ${newValue}`;
             }
           } else if (sectionType === 'compressor') {
             if (parameterName === 'compressor threshold' && nextTrimmed.startsWith('threshold ')) {
@@ -3295,6 +3906,68 @@ const commands = [
     }
   },
   {
+    name: "New Named Envelope",
+    description: "Create a named envelope for filter modulation",
+    action: () => {
+      // Get all existing names (oscillators, LFOs, envelopes)
+      const existingNames = Array.from(parametersTextbox.querySelectorAll('.block-content'))
+        .map(block => {
+          const text = block.textContent.trim();
+          const oscMatch = text.match(/^oscillator\s+(.+)$/i);
+          const lfoMatch = text.match(/^lfo\s+(.+)$/i);
+          const envMatch = text.match(/^envelope\s+(.+)$/i);
+          if (oscMatch) return oscMatch[1];
+          if (lfoMatch) return lfoMatch[1];
+          if (envMatch) return envMatch[1];
+          return null;
+        })
+        .filter(name => name !== null);
+
+      // Get a random unused name
+      const envName = getRandomUnusedName(existingNames);
+
+      // Use the saved block from when slash was pressed
+      const targetBlock = slashBlock;
+
+      // Create the new envelope blocks
+      const envHeaderBlock = createBlock(`envelope ${envName}`);
+      const attackBlock = createBlock(`  attack time 100`);
+      const decayBlock = createBlock(`  decay time 100`);
+      const sustainBlock = createBlock(`  sustain level 100`);
+      const releaseBlock = createBlock(`  release time 500`);
+
+      // Insert the blocks
+      if (targetBlock) {
+        // Insert after the current block (in reverse order)
+        targetBlock.insertAdjacentElement('afterend', releaseBlock);
+        targetBlock.insertAdjacentElement('afterend', sustainBlock);
+        targetBlock.insertAdjacentElement('afterend', decayBlock);
+        targetBlock.insertAdjacentElement('afterend', attackBlock);
+        targetBlock.insertAdjacentElement('afterend', envHeaderBlock);
+      } else {
+        // Append to the end
+        parametersTextbox.appendChild(envHeaderBlock);
+        parametersTextbox.appendChild(attackBlock);
+        parametersTextbox.appendChild(decayBlock);
+        parametersTextbox.appendChild(sustainBlock);
+        parametersTextbox.appendChild(releaseBlock);
+      }
+
+      // Format and sync
+      formatBlock(envHeaderBlock);
+      formatBlock(attackBlock);
+      formatBlock(decayBlock);
+      formatBlock(sustainBlock);
+      formatBlock(releaseBlock);
+
+      syncUIFromText();
+
+      // Position cursor at the end of the envelope name
+      const envContent = envHeaderBlock.querySelector('.block-content');
+      setCursorToEnd(envContent);
+    }
+  },
+  {
     name: "New Key",
     description: "Create a new key definition for dynamic modulation",
     action: () => {
@@ -3415,6 +4088,7 @@ const commands = [
       // Create the new envelope blocks
       const envelopeHeaderBlock = createBlock(`envelope`);
       const attackBlock = createBlock(`  attack time 100`);
+      const decayBlock = createBlock(`  decay time 100`);
       const sustainBlock = createBlock(`  sustain level 100`);
       const releaseBlock = createBlock(`  release time 500`);
 
@@ -3422,11 +4096,13 @@ const commands = [
       if (targetBlock) {
         targetBlock.insertAdjacentElement('afterend', releaseBlock);
         targetBlock.insertAdjacentElement('afterend', sustainBlock);
+        targetBlock.insertAdjacentElement('afterend', decayBlock);
         targetBlock.insertAdjacentElement('afterend', attackBlock);
         targetBlock.insertAdjacentElement('afterend', envelopeHeaderBlock);
       } else {
         parametersTextbox.appendChild(envelopeHeaderBlock);
         parametersTextbox.appendChild(attackBlock);
+        parametersTextbox.appendChild(decayBlock);
         parametersTextbox.appendChild(sustainBlock);
         parametersTextbox.appendChild(releaseBlock);
       }
@@ -3434,6 +4110,7 @@ const commands = [
       // Format and sync
       formatBlock(envelopeHeaderBlock);
       formatBlock(attackBlock);
+      formatBlock(decayBlock);
       formatBlock(sustainBlock);
       formatBlock(releaseBlock);
       syncUIFromText();
@@ -3486,6 +4163,39 @@ const commands = [
       // Position cursor at the compressor header
       const compressorContent = compressorHeaderBlock.querySelector('.block-content');
       setCursorToEnd(compressorContent);
+    }
+  },
+  {
+    name: "New Filter",
+    description: "Create a low-pass filter section",
+    action: () => {
+      const targetBlock = slashBlock;
+
+      // Create the new filter blocks
+      const filterHeaderBlock = createBlock(`filter`);
+      const frequencyBlock = createBlock(`  filter frequency 2000`);
+      const resonanceBlock = createBlock(`  filter resonance 1`);
+
+      // Insert the blocks
+      if (targetBlock) {
+        targetBlock.insertAdjacentElement('afterend', resonanceBlock);
+        targetBlock.insertAdjacentElement('afterend', frequencyBlock);
+        targetBlock.insertAdjacentElement('afterend', filterHeaderBlock);
+      } else {
+        parametersTextbox.appendChild(filterHeaderBlock);
+        parametersTextbox.appendChild(frequencyBlock);
+        parametersTextbox.appendChild(resonanceBlock);
+      }
+
+      // Format and sync
+      formatBlock(filterHeaderBlock);
+      formatBlock(frequencyBlock);
+      formatBlock(resonanceBlock);
+      syncUIFromText();
+
+      // Position cursor at the filter header
+      const filterContent = filterHeaderBlock.querySelector('.block-content');
+      setCursorToEnd(filterContent);
     }
   },
   {
@@ -3890,4 +4600,49 @@ document.addEventListener("keydown", (event) => {
     parametersTextbox.style.lineHeight = currentLineHeight;
     return;
   }
+
+  // Focus Virtual Keyboard: Cmd/Ctrl + K
+  if (modifier && event.key === "k") {
+    event.preventDefault();
+    const keyboard = document.getElementById("virtual-keyboard");
+    if (keyboard) {
+      keyboard.focus();
+      keyboard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    return;
+  }
+});
+
+// Track cursor position to update UI for current block
+parametersTextbox.addEventListener('click', () => {
+  // Small delay to ensure cursor position is updated
+  setTimeout(() => {
+    updateUIForCurrentBlock();
+  }, 10);
+});
+
+parametersTextbox.addEventListener('keyup', (e) => {
+  // Update UI on navigation keys
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) {
+    updateUIForCurrentBlock();
+  }
+});
+
+// Track selection changes (for mouse selection, focus changes, etc.)
+// Debounce to avoid excessive updates
+let selectionChangeTimeout = null;
+document.addEventListener('selectionchange', () => {
+  if (selectionChangeTimeout) {
+    clearTimeout(selectionChangeTimeout);
+  }
+  selectionChangeTimeout = setTimeout(() => {
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      // Check if selection is within parametersTextbox
+      if (parametersTextbox.contains(range.commonAncestorContainer)) {
+        updateUIForCurrentBlock();
+      }
+    }
+  }, 100); // 100ms debounce
 });

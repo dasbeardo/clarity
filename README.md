@@ -59,6 +59,33 @@ oscillator main
   pitch vibrato
 ```
 
+### Named Envelopes
+
+Create named ADSR envelopes for filter modulation:
+
+```
+envelope sweep
+  attack time 50
+  decay time 200
+  sustain level 50
+  release time 300
+```
+
+**Parameters:**
+- `attack time` - Attack time in milliseconds
+- `decay time` - Decay time in milliseconds
+- `sustain level` - Sustain level: 0 to 100
+- `release time` - Release time in milliseconds
+
+**Apply to filter:**
+```
+filter
+  filter frequency 5000
+  frequency envelope sweep
+```
+
+This modulates the filter frequency using the envelope. Each time you play a note, the filter frequency will follow the envelope curve, creating dynamic filter sweeps. You can also use `resonance envelope` to modulate the filter's resonance (Q factor).
+
 ### Global Settings
 
 Global settings use section-based syntax with indented parameters.
@@ -69,13 +96,29 @@ master
   volume 80
 ```
 
-**Envelope (applies to all notes):**
+**Envelope (ADSR - applies to all notes):**
 ```
 envelope
   attack time 100
+  decay time 100
   sustain level 100
   release time 500
 ```
+
+- **Attack**: Time (ms) to reach peak amplitude from 0
+- **Decay**: Time (ms) to decay from peak to sustain level
+- **Sustain**: Level (0-100%) to hold while note is pressed
+- **Release**: Time (ms) to fade to 0 after note is released
+
+**Filter (Low-Pass):**
+```
+filter
+  filter frequency 20000
+  filter resonance 1
+```
+
+- **filter frequency** - Cutoff frequency in Hz: 20 to 20000 (20000 = fully open)
+- **filter resonance** - Resonance (Q factor): 0.0001 to 20 (1 = flat response, higher = more resonance)
 
 **Compressor:**
 ```
@@ -168,10 +211,30 @@ Keywords, values, and parameters are color-coded for easy reading.
 ### Command Palette
 Press `/` in the text editor to open the command palette for quick actions.
 
+**Available Commands:**
+- **New Oscillator** - Create a new oscillator with default settings
+- **New LFO** - Create a new LFO with default settings
+- **New Named Envelope** - Create a named envelope for filter modulation
+- **New Key** - Create a key definition for dynamic modulation
+- **New Note** - Create a note-specific configuration
+- **New Variable** - Create a reusable variable
+- **New Master** - Create a master volume section
+- **New Envelope** - Create a global envelope section
+- **New Filter** - Create a low-pass filter section
+- **New Compressor** - Create a compressor section
+- **New Global** - Create a global settings section (chord and detune)
+- **Increase/Decrease Text Size** - Adjust editor text size
+- **Increase/Decrease Line Spacing** - Adjust line spacing
+
 ### Keyboard Shortcuts
 - Arrow keys: Navigate between lines
 - Cmd/Ctrl + Up/Down: Increment/decrement numeric values
 - Shift + Cmd/Ctrl + Up/Down: Increment/decrement by 10
+- Cmd/Ctrl + K: Focus virtual keyboard for playing notes
+- Cmd/Ctrl + =: Increase text size
+- Cmd/Ctrl + -: Decrease text size
+- Cmd/Ctrl + ]: Increase line spacing
+- Cmd/Ctrl + [: Decrease line spacing
 
 ## Example Configurations
 
