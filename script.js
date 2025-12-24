@@ -1377,7 +1377,7 @@ class PolyphonyManager {
     this.activeNotes = new Map();
   }
 
-  startNote(frequency, noteId, velocity = 127, isSynthetic = false, midiNote = null, keyChar = null) {
+  startNote(frequency, noteId, velocity = 127, isSynthetic = false, midiNote = null, keyChar = null, oscillatorFilter = null) {
     if (this.activeNotes.has(noteId)) {
       this.stopNote(noteId);
     }
@@ -1388,8 +1388,8 @@ class PolyphonyManager {
     // Determine key scope if a key is held
     const keyScope = keyChar ? `key_${keyChar}` : null;
 
-    // Create note using audio engine
-    const note = audioEngine ? audioEngine.createNote(noteName, frequency, keyScope) : null;
+    // Create note using audio engine (with optional oscillator filter for sequencer)
+    const note = audioEngine ? audioEngine.createNote(noteName, frequency, keyScope, oscillatorFilter) : null;
 
     if (note) {
       this.activeNotes.set(noteId, note);
@@ -3494,22 +3494,48 @@ document.addEventListener("keyup", (e) => {
   }
 });
 
+// Stop all keyboard notes when virtual-keyboard loses focus
 document.addEventListener("blur", (e) => {
   if (e.target.id === "virtual-keyboard") {
-    activeKeys.forEach(key => {
-      const noteId = `keyboard-${key}`;
-      polyphonyManager.stopNote(noteId);
-
-      // Remove highlight from the key
-      const keyElement = document.querySelector(`.key-label[data-key="${key}"]`);
-      if (keyElement) {
-        keyElement.classList.remove('active');
-      }
-    });
-    activeKeys.clear();
-    activeDefinedKeys.clear();
+    stopAllKeyboardNotes();
   }
 }, true);
+
+// Also stop all notes when window loses focus (catches alt-tab, clicking other apps, etc.)
+window.addEventListener("blur", () => {
+  stopAllKeyboardNotes();
+});
+
+// And when tab becomes hidden
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    stopAllKeyboardNotes();
+  }
+});
+
+function stopAllKeyboardNotes() {
+  activeKeys.forEach(key => {
+    const midiNote = keyToNote[key];
+    if (midiNote !== undefined) {
+      const rootFrequency = 440 * Math.pow(2, (midiNote - 69) / 12);
+      const frequencies = getChordFrequencies(rootFrequency, midiNote);
+
+      // Stop all chord notes (with index)
+      frequencies.forEach((freq, index) => {
+        const noteId = `keyboard-${key}-${index}`;
+        polyphonyManager.stopNote(noteId);
+      });
+    }
+
+    // Remove highlight from the key
+    const keyElement = document.querySelector(`.key-label[data-key="${key}"]`);
+    if (keyElement) {
+      keyElement.classList.remove('active');
+    }
+  });
+  activeKeys.clear();
+  activeDefinedKeys.clear();
+}
 
   // Track selection changes (for mouse selection, focus changes, etc.)
   // DISABLED: This was causing constant UI regeneration which removed slider event listeners
@@ -4383,11 +4409,15 @@ function switchTab(tabName) {
  * Handle sequencer text changes
  */
 function onSequencerTextChange(event) {
-  const text = event.target.textContent;
+  // Use innerText to preserve line breaks from contentEditable
+  const text = event.target.innerText;
+  console.log('Raw sequencer text:', JSON.stringify(text));
   sequencerEditorContent = text;
 
   // Re-parse
-  sequencer.parse(text);
+  const result = sequencer.parse(text);
+  console.log('Sequencer parsed:', result.tracks.length, 'tracks');
+  result.tracks.forEach((t, i) => console.log(`  Track ${i}: ${t.oscillator}, ${t.steps.length} steps`));
 
   // Update UI
   updateSequencerUI();
@@ -4459,6 +4489,7 @@ function showSequencerControls() {
 
   // Track indicators
   const state = sequencer.getState();
+  console.log('showSequencerControls: state has', state.tracks.length, 'tracks');
 
   state.tracks.forEach((track, trackIndex) => {
     const trackSection = document.createElement('div');
@@ -4531,10 +4562,9 @@ function playSequencer() {
   }
 
   sequencer.play((frequency, noteName, duration, oscillatorName) => {
-    // Trigger note through polyphony manager
-    // TODO: Route to specific oscillator when oscillatorName is provided
+    // Trigger note through polyphony manager with oscillator filter
     const noteId = `seq_${Date.now()}_${Math.random()}`;
-    polyphonyManager.startNote(frequency, noteId, 127, true, null, null);
+    polyphonyManager.startNote(frequency, noteId, 127, true, null, null, oscillatorName);
 
     // Stop note after duration
     setTimeout(() => {

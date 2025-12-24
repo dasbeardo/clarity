@@ -71,9 +71,10 @@ class AudioEngine {
    * @param {string} noteName - Note name (e.g., 'c4')
    * @param {number} frequency - Base frequency
    * @param {string|null} keyScope - Active key scope if any (e.g., 'key_a')
+   * @param {string|null} oscillatorFilter - Only use this oscillator (null = all)
    * @returns {NoteInstance} Note instance
    */
-  createNote(noteName, frequency, keyScope = null) {
+  createNote(noteName, frequency, keyScope = null, oscillatorFilter = null) {
     // Determine scope key for note
     const noteScope = `note_${noteName}`;
 
@@ -89,7 +90,8 @@ class AudioEngine {
       keyScope,
       components,
       this.store,
-      this.schemas
+      this.schemas,
+      oscillatorFilter
     );
 
     // Track active note
@@ -250,7 +252,7 @@ class AudioEngine {
  * Represents a single note with all its oscillators and modulation
  */
 class NoteInstance {
-  constructor(audioContext, noteName, frequency, noteScope, keyScope, components, store, schemas) {
+  constructor(audioContext, noteName, frequency, noteScope, keyScope, components, store, schemas, oscillatorFilter = null) {
     this.audioContext = audioContext;
     this.noteName = noteName;
     this.frequency = frequency;
@@ -259,6 +261,7 @@ class NoteInstance {
     this.components = components;
     this.store = store;
     this.schemas = schemas;
+    this.oscillatorFilter = oscillatorFilter; // Only create this oscillator (null = all)
 
     // Audio nodes created for this note
     this.oscillators = [];
@@ -294,6 +297,10 @@ class NoteInstance {
     const oscillators = this.components.oscillators || {};
 
     for (const [name, oscComponent] of Object.entries(oscillators)) {
+      // If oscillatorFilter is set, only create that oscillator
+      if (this.oscillatorFilter && name !== this.oscillatorFilter) {
+        continue;
+      }
       this._createOscillator(oscComponent);
     }
   }
