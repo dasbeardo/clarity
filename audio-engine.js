@@ -331,19 +331,21 @@ class NoteInstance {
     const volume = this._resolveValue(oscComponent.attributes.volume) || 50;
     const volumeGain = volume / 100;
 
-    // Apply oscillator envelope (attack, sustain, release)
+    // Apply oscillator envelope (attack, decay, sustain, release)
     const attack = this._resolveValue(oscComponent.attributes.attack) || 100;
-    const sustain = this._resolveValue(oscComponent.attributes.sustain) || 50;
+    const decay = this._resolveValue(oscComponent.attributes.decay) || 100;
+    const sustain = this._resolveValue(oscComponent.attributes.sustain) || 100;
     const release = this._resolveValue(oscComponent.attributes.release) || 500;
 
     const attackTime = attack / 1000;
+    const decayTime = decay / 1000;
     const sustainLevel = (sustain / 100) * volumeGain;
     const releaseTime = release / 1000;
 
     const now = this.audioContext.currentTime;
     envGain.gain.setValueAtTime(0, now);
     envGain.gain.linearRampToValueAtTime(volumeGain, now + attackTime);
-    envGain.gain.setValueAtTime(sustainLevel, now + attackTime);
+    envGain.gain.linearRampToValueAtTime(sustainLevel, now + attackTime + decayTime);
 
     // Apply pitch modulation (LFO)
     const pitchRef = oscComponent.attributes.pitch;

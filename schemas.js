@@ -112,12 +112,22 @@ const COMPONENT_SCHEMAS = {
         ui: { control: 'slider', label: 'attack time' },
         canReference: [AttributeType.VARIABLE_REF]
       },
+      decay: {
+        type: AttributeType.TIME_MS,
+        min: 0,
+        max: 2000,
+        step: 10,
+        default: 100,
+        description: 'Decay time',
+        ui: { control: 'slider', label: 'decay time' },
+        canReference: [AttributeType.VARIABLE_REF]
+      },
       sustain: {
         type: AttributeType.PERCENTAGE,
         min: 0,
         max: 100,
         step: 1,
-        default: 50,
+        default: 100,
         description: 'Sustain level',
         ui: { control: 'slider', label: 'sustain level' },
         canReference: [AttributeType.VARIABLE_REF]
