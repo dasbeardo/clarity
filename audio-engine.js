@@ -445,11 +445,11 @@ class NoteInstance {
     for (const { envGain, releaseTime } of this.oscillators) {
       envGain.gain.cancelScheduledValues(now);
       envGain.gain.setValueAtTime(envGain.gain.value, now);
-      envGain.gain.linearRampToValueAtTime(0, now + releaseTime / 1000);
+      envGain.gain.linearRampToValueAtTime(0, now + releaseTime);
     }
 
     // Stop oscillators and LFOs after release
-    const maxRelease = Math.max(masterReleaseTime, ...this.oscillators.map(o => o.releaseTime / 1000));
+    const maxRelease = Math.max(masterReleaseTime, ...this.oscillators.map(o => o.releaseTime));
     setTimeout(() => {
       for (const { osc } of this.oscillators) {
         osc.stop();
