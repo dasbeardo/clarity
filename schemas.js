@@ -509,6 +509,50 @@ const SchemaUtils = {
     const attrSchema = this.getAttributeSchema(componentType, attributeName);
     if (!attrSchema) return false;
     return attrSchema.canReference?.includes(AttributeType.VARIABLE_REF) || false;
+  },
+
+  /**
+   * Get a map of all attribute labels/names to their schema keys for a component type
+   * Returns array of { label, key } sorted by label length (longest first)
+   */
+  getAttributeLabelMap(componentType) {
+    const schema = this.getComponentSchema(componentType);
+    if (!schema || !schema.attributes) return [];
+
+    const labelMap = [];
+    for (const [key, attrSchema] of Object.entries(schema.attributes)) {
+      // Add the key itself as a valid name
+      labelMap.push({ label: key, key: key });
+      // Also add the UI label if different from key
+      if (attrSchema.ui?.label && attrSchema.ui.label !== key) {
+        labelMap.push({ label: attrSchema.ui.label, key: key });
+      }
+    }
+    // Sort by label length descending (longest first for greedy matching)
+    labelMap.sort((a, b) => b.label.length - a.label.length);
+    return labelMap;
+  },
+
+  /**
+   * Get a map of all attribute labels/names to their schema keys for a trigger type
+   * Returns array of { label, key } sorted by label length (longest first)
+   */
+  getTriggerAttributeLabelMap(triggerType) {
+    const schema = this.getTriggerSchema(triggerType);
+    if (!schema || !schema.attributes) return [];
+
+    const labelMap = [];
+    for (const [key, attrSchema] of Object.entries(schema.attributes)) {
+      // Add the key itself as a valid name
+      labelMap.push({ label: key, key: key });
+      // Also add the UI label if different from key
+      if (attrSchema.ui?.label && attrSchema.ui.label !== key) {
+        labelMap.push({ label: attrSchema.ui.label, key: key });
+      }
+    }
+    // Sort by label length descending (longest first for greedy matching)
+    labelMap.sort((a, b) => b.label.length - a.label.length);
+    return labelMap;
   }
 };
 
