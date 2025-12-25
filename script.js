@@ -1389,7 +1389,8 @@ class PolyphonyManager {
     const keyScope = keyChar ? `key_${keyChar}` : null;
 
     // Create note using audio engine (with optional oscillator filter for sequencer)
-    const note = audioEngine ? audioEngine.createNote(noteName, frequency, keyScope, oscillatorFilter) : null;
+    // Pass velocity for dynamic expression (0-127 scale)
+    const note = audioEngine ? audioEngine.createNote(noteName, frequency, keyScope, oscillatorFilter, velocity) : null;
 
     if (note) {
       this.activeNotes.set(noteId, note);
@@ -4561,16 +4562,28 @@ function playSequencer() {
     playBtn.classList.add('playing');
   }
 
-  sequencer.play((frequency, noteName, duration, oscillatorName) => {
-    // Trigger note through polyphony manager with oscillator filter
-    const noteId = `seq_${Date.now()}_${Math.random()}`;
-    polyphonyManager.startNote(frequency, noteId, 127, true, null, null, oscillatorName);
+  sequencer.play(
+    // triggerNote callback - now receives velocity and tie
+    (frequency, noteName, duration, oscillatorName, velocity = 127, tie = false) => {
+      // Trigger note through polyphony manager with oscillator filter
+      const noteId = `seq_${Date.now()}_${Math.random()}`;
+      polyphonyManager.startNote(frequency, noteId, velocity, true, null, null, oscillatorName);
 
-    // Stop note after duration
-    setTimeout(() => {
+      // Stop note after duration (unless tied - sequencer handles tie cleanup)
+      if (!tie) {
+        setTimeout(() => {
+          polyphonyManager.stopNote(noteId);
+        }, duration);
+      }
+
+      // Return noteId so sequencer can track tied notes
+      return noteId;
+    },
+    // stopNote callback - for tie cleanup
+    (noteId) => {
       polyphonyManager.stopNote(noteId);
-    }, duration);
-  });
+    }
+  );
 }
 
 /**
@@ -4593,9 +4606,20 @@ function updateSequencerText() {
   const state = sequencer.getState();
 
   let text = `bpm ${state.bpm}\n`;
+  if (state.swing !== 50) {
+    text += `swing ${state.swing}\n`;
+  }
 
   for (const track of state.tracks) {
-    const sequenceStr = track.steps.map(s => s.type === 'rest' ? '-' : s.noteName).join(' ');
+    const sequenceStr = track.steps.map(s => {
+      if (s.type === 'rest') return '-';
+      // Reconstruct note with modifiers
+      let note = s.noteName;
+      if (s.velocity !== 100) note += `@${s.velocity}`;
+      if (s.gate !== 100) note += `:${s.gate}`;
+      if (s.tie) note += '~';
+      return note;
+    }).join(' ');
     if (track.oscillator) {
       text += `\noscillator ${track.oscillator}\n  sequence ${sequenceStr}\n`;
     } else {
