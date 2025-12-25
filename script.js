@@ -1377,7 +1377,7 @@ class PolyphonyManager {
     this.activeNotes = new Map();
   }
 
-  startNote(frequency, noteId, velocity = 127, isSynthetic = false, midiNote = null, keyChar = null) {
+  startNote(frequency, noteId, velocity = 127, isSynthetic = false, midiNote = null, keyChar = null, oscillatorFilter = null) {
     if (this.activeNotes.has(noteId)) {
       this.stopNote(noteId);
     }
@@ -1388,8 +1388,9 @@ class PolyphonyManager {
     // Determine key scope if a key is held
     const keyScope = keyChar ? `key_${keyChar}` : null;
 
-    // Create note using audio engine
-    const note = audioEngine ? audioEngine.createNote(noteName, frequency, keyScope) : null;
+    // Create note using audio engine (with optional oscillator filter for sequencer)
+    // Pass velocity for dynamic expression (0-127 scale)
+    const note = audioEngine ? audioEngine.createNote(noteName, frequency, keyScope, oscillatorFilter, velocity) : null;
 
     if (note) {
       this.activeNotes.set(noteId, note);
@@ -1808,6 +1809,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Polyphony Manager
     console.log('Creating polyphony manager...');
     polyphonyManager = new PolyphonyManager();
+
+    // Initialize Sequencer
+    console.log('Initializing sequencer...');
+    initializeSequencer();
+    initializeSequencerUI();
 
     console.log('Systems initialized, calling initialize()...');
 
@@ -3489,22 +3495,48 @@ document.addEventListener("keyup", (e) => {
   }
 });
 
+// Stop all keyboard notes when virtual-keyboard loses focus
 document.addEventListener("blur", (e) => {
   if (e.target.id === "virtual-keyboard") {
-    activeKeys.forEach(key => {
-      const noteId = `keyboard-${key}`;
-      polyphonyManager.stopNote(noteId);
-
-      // Remove highlight from the key
-      const keyElement = document.querySelector(`.key-label[data-key="${key}"]`);
-      if (keyElement) {
-        keyElement.classList.remove('active');
-      }
-    });
-    activeKeys.clear();
-    activeDefinedKeys.clear();
+    stopAllKeyboardNotes();
   }
 }, true);
+
+// Also stop all notes when window loses focus (catches alt-tab, clicking other apps, etc.)
+window.addEventListener("blur", () => {
+  stopAllKeyboardNotes();
+});
+
+// And when tab becomes hidden
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    stopAllKeyboardNotes();
+  }
+});
+
+function stopAllKeyboardNotes() {
+  activeKeys.forEach(key => {
+    const midiNote = keyToNote[key];
+    if (midiNote !== undefined) {
+      const rootFrequency = 440 * Math.pow(2, (midiNote - 69) / 12);
+      const frequencies = getChordFrequencies(rootFrequency, midiNote);
+
+      // Stop all chord notes (with index)
+      frequencies.forEach((freq, index) => {
+        const noteId = `keyboard-${key}-${index}`;
+        polyphonyManager.stopNote(noteId);
+      });
+    }
+
+    // Remove highlight from the key
+    const keyElement = document.querySelector(`.key-label[data-key="${key}"]`);
+    if (keyElement) {
+      keyElement.classList.remove('active');
+    }
+  });
+  activeKeys.clear();
+  activeDefinedKeys.clear();
+}
 
   // Track selection changes (for mouse selection, focus changes, etc.)
   // DISABLED: This was causing constant UI regeneration which removed slider event listeners
@@ -4294,3 +4326,311 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 });
+
+// ============================================================================
+// SEQUENCER UI
+// ============================================================================
+
+let currentTab = 'synth';
+let sequencerEditorContent = `bpm 140
+
+oscillator lead
+  sequence e5 e5 - e5 - c5 e5 - g5 - - - g4 - - -
+
+oscillator bass
+  sequence c3 - - c3 - - g2 - c3 - - - g2 - - -`;
+
+/**
+ * Initialize sequencer UI (tabs, editor, controls)
+ */
+function initializeSequencerUI() {
+  // Set up tab switching
+  const tabs = document.querySelectorAll('.editor-tabs .tab');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const tabName = tab.dataset.tab;
+      switchTab(tabName);
+    });
+  });
+
+  // Initialize sequencer editor content
+  const sequencerEditor = document.getElementById('sequencer-editor');
+  if (sequencerEditor) {
+    // Create block-based editor for sequencer (simpler version)
+    sequencerEditor.innerHTML = '';
+    const editorArea = document.createElement('div');
+    editorArea.className = 'sequencer-text';
+    editorArea.contentEditable = true;
+    editorArea.textContent = sequencerEditorContent;
+    editorArea.addEventListener('input', onSequencerTextChange);
+    sequencerEditor.appendChild(editorArea);
+
+    // Parse initial content
+    sequencer.parse(sequencerEditorContent);
+  }
+
+  // Set up step change callback
+  if (sequencer) {
+    sequencer.onStepChange = updateStepIndicator;
+  }
+
+  console.log('Sequencer UI initialized');
+}
+
+/**
+ * Switch between synth and sequencer tabs
+ */
+function switchTab(tabName) {
+  currentTab = tabName;
+
+  // Update tab buttons
+  const tabs = document.querySelectorAll('.editor-tabs .tab');
+  tabs.forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.tab === tabName);
+  });
+
+  // Update content visibility
+  const parametersEl = document.getElementById('parameters');
+  const sequencerEl = document.getElementById('sequencer-editor');
+
+  if (tabName === 'synth') {
+    parametersEl.classList.remove('hidden');
+    sequencerEl.classList.add('hidden');
+    // Show synth UI on right pane
+    syncUIFromText();
+  } else {
+    parametersEl.classList.add('hidden');
+    sequencerEl.classList.remove('hidden');
+    // Show sequencer UI on right pane
+    showSequencerControls();
+  }
+}
+
+/**
+ * Handle sequencer text changes
+ */
+function onSequencerTextChange(event) {
+  // Use innerText to preserve line breaks from contentEditable
+  const text = event.target.innerText;
+  console.log('Raw sequencer text:', JSON.stringify(text));
+  sequencerEditorContent = text;
+
+  // Re-parse
+  const result = sequencer.parse(text);
+  console.log('Sequencer parsed:', result.tracks.length, 'tracks');
+  result.tracks.forEach((t, i) => console.log(`  Track ${i}: ${t.oscillator}, ${t.steps.length} steps`));
+
+  // Update UI
+  updateSequencerUI();
+}
+
+/**
+ * Show sequencer controls in the right pane
+ */
+function showSequencerControls() {
+  const container = document.getElementById('oscillators-container');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  // Create sequencer controls section
+  const section = document.createElement('div');
+  section.className = 'controls-section sequencer-controls';
+
+  // Header
+  const header = document.createElement('h2');
+  header.textContent = 'sequencer';
+  section.appendChild(header);
+
+  // BPM slider
+  const bpmContainer = document.createElement('div');
+  bpmContainer.className = 'slider-container';
+
+  const bpmLabel = document.createElement('label');
+  bpmLabel.textContent = 'bpm';
+  bpmContainer.appendChild(bpmLabel);
+
+  const bpmSlider = document.createElement('input');
+  bpmSlider.type = 'range';
+  bpmSlider.id = 'seq-bpm';
+  bpmSlider.min = '40';
+  bpmSlider.max = '240';
+  bpmSlider.value = sequencer.bpm;
+  bpmSlider.addEventListener('input', (e) => {
+    sequencer.setBpm(parseInt(e.target.value, 10));
+    updateSequencerText();
+    bpmValue.textContent = e.target.value;
+  });
+  bpmContainer.appendChild(bpmSlider);
+
+  const bpmValue = document.createElement('span');
+  bpmValue.className = 'slider-value';
+  bpmValue.textContent = sequencer.bpm;
+  bpmContainer.appendChild(bpmValue);
+
+  section.appendChild(bpmContainer);
+
+  // Transport controls
+  const transport = document.createElement('div');
+  transport.className = 'sequencer-transport';
+
+  const playBtn = document.createElement('button');
+  playBtn.id = 'seq-play';
+  playBtn.textContent = 'Play';
+  playBtn.addEventListener('click', toggleSequencerPlayback);
+  transport.appendChild(playBtn);
+
+  const stopBtn = document.createElement('button');
+  stopBtn.id = 'seq-stop';
+  stopBtn.textContent = 'Stop';
+  stopBtn.addEventListener('click', stopSequencer);
+  transport.appendChild(stopBtn);
+
+  section.appendChild(transport);
+
+  // Track indicators
+  const state = sequencer.getState();
+  console.log('showSequencerControls: state has', state.tracks.length, 'tracks');
+
+  state.tracks.forEach((track, trackIndex) => {
+    const trackSection = document.createElement('div');
+    trackSection.className = 'track-section';
+
+    const trackLabel = document.createElement('div');
+    trackLabel.className = 'track-label';
+    trackLabel.textContent = track.oscillator || 'default';
+    trackSection.appendChild(trackLabel);
+
+    const stepContainer = document.createElement('div');
+    stepContainer.className = 'step-indicator';
+    stepContainer.dataset.track = trackIndex;
+
+    track.steps.forEach((step, i) => {
+      const stepEl = document.createElement('div');
+      stepEl.className = 'step' + (step.type === 'rest' ? ' rest' : '');
+      stepEl.textContent = step.type === 'rest' ? '-' : step.noteName.replace(/\d/, '');
+      stepContainer.appendChild(stepEl);
+    });
+
+    trackSection.appendChild(stepContainer);
+    section.appendChild(trackSection);
+  });
+
+  container.appendChild(section);
+}
+
+/**
+ * Update sequencer UI (BPM, step indicator)
+ */
+function updateSequencerUI() {
+  if (currentTab !== 'sequencer') return;
+  showSequencerControls();
+}
+
+/**
+ * Update step indicator highlight for all tracks
+ */
+function updateStepIndicator(stepIndex) {
+  const containers = document.querySelectorAll('.step-indicator');
+
+  containers.forEach(container => {
+    const steps = container.querySelectorAll('.step');
+    steps.forEach((step, i) => {
+      step.classList.toggle('active', i === stepIndex);
+    });
+  });
+}
+
+/**
+ * Toggle sequencer playback
+ */
+function toggleSequencerPlayback() {
+  if (sequencer.isPlaying) {
+    stopSequencer();
+  } else {
+    playSequencer();
+  }
+}
+
+/**
+ * Start sequencer playback
+ */
+function playSequencer() {
+  const playBtn = document.getElementById('seq-play');
+  if (playBtn) {
+    playBtn.textContent = 'Pause';
+    playBtn.classList.add('playing');
+  }
+
+  sequencer.play(
+    // triggerNote callback - now receives velocity and tie
+    (frequency, noteName, duration, oscillatorName, velocity = 127, tie = false) => {
+      // Trigger note through polyphony manager with oscillator filter
+      const noteId = `seq_${Date.now()}_${Math.random()}`;
+      polyphonyManager.startNote(frequency, noteId, velocity, true, null, null, oscillatorName);
+
+      // Stop note after duration (unless tied - sequencer handles tie cleanup)
+      if (!tie) {
+        setTimeout(() => {
+          polyphonyManager.stopNote(noteId);
+        }, duration);
+      }
+
+      // Return noteId so sequencer can track tied notes
+      return noteId;
+    },
+    // stopNote callback - for tie cleanup
+    (noteId) => {
+      polyphonyManager.stopNote(noteId);
+    }
+  );
+}
+
+/**
+ * Stop sequencer playback
+ */
+function stopSequencer() {
+  sequencer.stop();
+
+  const playBtn = document.getElementById('seq-play');
+  if (playBtn) {
+    playBtn.textContent = 'Play';
+    playBtn.classList.remove('playing');
+  }
+}
+
+/**
+ * Update sequencer text from UI changes
+ */
+function updateSequencerText() {
+  const state = sequencer.getState();
+
+  let text = `bpm ${state.bpm}\n`;
+  if (state.swing !== 50) {
+    text += `swing ${state.swing}\n`;
+  }
+
+  for (const track of state.tracks) {
+    const sequenceStr = track.steps.map(s => {
+      if (s.type === 'rest') return '-';
+      // Reconstruct note with modifiers
+      let note = s.noteName;
+      if (s.velocity !== 100) note += `@${s.velocity}`;
+      if (s.gate !== 100) note += `:${s.gate}`;
+      if (s.tie) note += '~';
+      return note;
+    }).join(' ');
+    if (track.oscillator) {
+      text += `\noscillator ${track.oscillator}\n  sequence ${sequenceStr}\n`;
+    } else {
+      text += `\nsequence ${sequenceStr}\n`;
+    }
+  }
+
+  sequencerEditorContent = text.trim();
+
+  const editorArea = document.querySelector('#sequencer-editor .sequencer-text');
+  if (editorArea) {
+    editorArea.textContent = sequencerEditorContent;
+  }
+}

@@ -36,9 +36,13 @@ class AudioEngine {
 
     // Apply master volume
     const masterVolume = this.store.getTriggerAttribute('master', 'volume');
+    console.log('initializeMaster - masterVolume from store:', masterVolume);
     if (masterVolume !== null) {
-      this.masterGain.gain.value = this._percentageToGain(masterVolume);
+      const gainValue = this._percentageToGain(masterVolume);
+      console.log('  Setting masterGain to:', gainValue);
+      this.masterGain.gain.value = gainValue;
     } else {
+      console.log('  masterVolume is null, using default 0.8');
       this.masterGain.gain.value = 0.8; // Default
     }
 
@@ -71,9 +75,11 @@ class AudioEngine {
    * @param {string} noteName - Note name (e.g., 'c4')
    * @param {number} frequency - Base frequency
    * @param {string|null} keyScope - Active key scope if any (e.g., 'key_a')
+   * @param {string|null} oscillatorFilter - Only use this oscillator (null = all)
+   * @param {number} velocity - Note velocity 0-127 (default 127)
    * @returns {NoteInstance} Note instance
    */
-  createNote(noteName, frequency, keyScope = null) {
+  createNote(noteName, frequency, keyScope = null, oscillatorFilter = null, velocity = 127) {
     // Determine scope key for note
     const noteScope = `note_${noteName}`;
 
@@ -89,7 +95,9 @@ class AudioEngine {
       keyScope,
       components,
       this.store,
-      this.schemas
+      this.schemas,
+      oscillatorFilter,
+      velocity
     );
 
     // Track active note
@@ -250,7 +258,7 @@ class AudioEngine {
  * Represents a single note with all its oscillators and modulation
  */
 class NoteInstance {
-  constructor(audioContext, noteName, frequency, noteScope, keyScope, components, store, schemas) {
+  constructor(audioContext, noteName, frequency, noteScope, keyScope, components, store, schemas, oscillatorFilter = null, velocity = 127) {
     this.audioContext = audioContext;
     this.noteName = noteName;
     this.frequency = frequency;
@@ -259,6 +267,8 @@ class NoteInstance {
     this.components = components;
     this.store = store;
     this.schemas = schemas;
+    this.oscillatorFilter = oscillatorFilter; // Only create this oscillator (null = all)
+    this.velocity = velocity / 127; // Normalize 0-127 to 0-1 for gain scaling
 
     // Audio nodes created for this note
     this.oscillators = [];
@@ -294,6 +304,10 @@ class NoteInstance {
     const oscillators = this.components.oscillators || {};
 
     for (const [name, oscComponent] of Object.entries(oscillators)) {
+      // If oscillatorFilter is set, only create that oscillator
+      if (this.oscillatorFilter && name !== this.oscillatorFilter) {
+        continue;
+      }
       this._createOscillator(oscComponent);
     }
   }
@@ -320,23 +334,27 @@ class NoteInstance {
     osc.connect(envGain);
     envGain.connect(this.noteGain);
 
-    // Get volume
+    // Get volume and apply velocity scaling
     const volume = this._resolveValue(oscComponent.attributes.volume) || 50;
-    const volumeGain = volume / 100;
+    const volumeGain = (volume / 100) * this.velocity; // Scale by velocity
 
-    // Apply oscillator envelope (attack, sustain, release)
+    // Apply oscillator envelope (attack, decay, sustain, release)
     const attack = this._resolveValue(oscComponent.attributes.attack) || 100;
-    const sustain = this._resolveValue(oscComponent.attributes.sustain) || 50;
+    const decay = this._resolveValue(oscComponent.attributes.decay) || 100;
+    const sustain = this._resolveValue(oscComponent.attributes.sustain) || 100;
     const release = this._resolveValue(oscComponent.attributes.release) || 500;
 
+    console.log(`Oscillator ${oscComponent.name} ADSR: attack=${attack}ms, decay=${decay}ms, sustain=${sustain}%, release=${release}ms, velocity=${Math.round(this.velocity * 100)}%`);
+
     const attackTime = attack / 1000;
-    const sustainLevel = (sustain / 100) * volumeGain;
+    const decayTime = decay / 1000;
+    const sustainLevel = (sustain / 100) * volumeGain; // Already includes velocity
     const releaseTime = release / 1000;
 
     const now = this.audioContext.currentTime;
     envGain.gain.setValueAtTime(0, now);
     envGain.gain.linearRampToValueAtTime(volumeGain, now + attackTime);
-    envGain.gain.setValueAtTime(sustainLevel, now + attackTime);
+    envGain.gain.linearRampToValueAtTime(sustainLevel, now + attackTime + decayTime);
 
     // Apply pitch modulation (LFO)
     const pitchRef = oscComponent.attributes.pitch;
@@ -427,6 +445,8 @@ class NoteInstance {
     const masterRelease = this._resolveValue(masterAttrs.release) || 500;
     const masterReleaseTime = masterRelease / 1000;
 
+    console.log(`stop() called - master release: ${masterRelease}ms (${masterReleaseTime}s)`);
+
     // Apply release to master envelope
     this.noteGain.gain.cancelScheduledValues(now);
     this.noteGain.gain.setValueAtTime(this.noteGain.gain.value, now);
@@ -434,13 +454,15 @@ class NoteInstance {
 
     // Apply release to each oscillator envelope
     for (const { envGain, releaseTime } of this.oscillators) {
+      console.log(`  oscillator release: ${releaseTime}s`);
       envGain.gain.cancelScheduledValues(now);
       envGain.gain.setValueAtTime(envGain.gain.value, now);
-      envGain.gain.linearRampToValueAtTime(0, now + releaseTime / 1000);
+      envGain.gain.linearRampToValueAtTime(0, now + releaseTime);
     }
 
     // Stop oscillators and LFOs after release
-    const maxRelease = Math.max(masterReleaseTime, ...this.oscillators.map(o => o.releaseTime / 1000));
+    const maxRelease = Math.max(masterReleaseTime, ...this.oscillators.map(o => o.releaseTime));
+    console.log(`  maxRelease: ${maxRelease}s, stopping oscillators in ${maxRelease * 1000 + 100}ms`);
     setTimeout(() => {
       for (const { osc } of this.oscillators) {
         osc.stop();

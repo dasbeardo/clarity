@@ -35,8 +35,15 @@
   <div class="container">
     <!-- Left Pane: Text Editor -->
     <div class="left-pane">
-      <div class="pane-header">clarity.instrument</div>
-      <div id="parameters"></div>
+      <div class="pane-header">
+        <span class="header-title">clarity</span>
+        <div class="editor-tabs">
+          <button class="tab active" data-tab="synth">.instrument</button>
+          <button class="tab" data-tab="sequencer">.sequence</button>
+        </div>
+      </div>
+      <div id="parameters" class="tab-content"></div>
+      <div id="sequencer-editor" class="tab-content hidden"></div>
     </div>
 
     <!-- Right Pane: Controls -->
@@ -197,6 +204,7 @@
   <script src="parser.js"></script>
   <script src="audio-engine.js"></script>
   <script src="ui-generator.js"></script>
+  <script src="sequencer.js"></script>
   <!-- Main application script -->
   <script src="script.js"></script>
 </body>

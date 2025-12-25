@@ -493,26 +493,50 @@ class Parser {
   /**
    * Parse attribute
    * Format: [name] [value|reference]
+   * Supports multi-word attribute names (e.g., "attack time 100")
    */
   _parseAttribute(content, indent) {
-    const parts = content.split(' ');
-    const attributeName = parts[0];
-    const valueStr = parts.slice(1).join(' ').trim();
+    // Get the label map for the current context to support multi-word attribute names
+    let labelMap = [];
+    if (this.context.currentComponent) {
+      labelMap = this.schemas.SchemaUtils.getAttributeLabelMap(this.context.currentComponent.type);
+    } else if (this.context.currentTrigger) {
+      labelMap = this.schemas.SchemaUtils.getTriggerAttributeLabelMap(this.context.currentTrigger.type);
+    }
+
+    // Try to match against known attribute names/labels (longest first)
+    let attributeKey = null;
+    let valueStr = null;
+
+    for (const { label, key } of labelMap) {
+      if (content.startsWith(label + ' ')) {
+        attributeKey = key;
+        valueStr = content.slice(label.length + 1).trim();
+        break;
+      }
+    }
+
+    // Fallback: simple split on first space (for unknown attributes)
+    if (!attributeKey) {
+      const parts = content.split(' ');
+      attributeKey = parts[0];
+      valueStr = parts.slice(1).join(' ').trim();
+    }
 
     if (!valueStr) {
-      this.context.addError(`Attribute "${attributeName}" requires a value`);
+      this.context.addError(`Attribute "${attributeKey}" requires a value`);
       return;
     }
 
     // Determine context - are we in a component or trigger?
     if (this.context.currentComponent) {
       // Component attribute
-      this._parseComponentAttribute(attributeName, valueStr);
+      this._parseComponentAttribute(attributeKey, valueStr);
     } else if (this.context.currentTrigger) {
       // Trigger attribute
-      this._parseTriggerAttribute(attributeName, valueStr);
+      this._parseTriggerAttribute(attributeKey, valueStr);
     } else {
-      this.context.addError(`Attribute "${attributeName}" must be inside a component or trigger`);
+      this.context.addError(`Attribute "${attributeKey}" must be inside a component or trigger`);
     }
   }
 
