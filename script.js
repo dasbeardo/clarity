@@ -1832,6 +1832,9 @@ document.addEventListener('DOMContentLoaded', () => {
       headerStopBtn.addEventListener('click', stopSequencer);
     }
 
+    // Set up help modal
+    initializeHelpModal();
+
     console.log('Systems initialized, calling initialize()...');
 
     // Call the main initialize function
@@ -4392,6 +4395,71 @@ function hideCommandModal() {
   commandModal.classList.add("hidden");
   slashPosition = null;
   slashBlock = null;
+}
+
+// ============================================================================
+// HELP MODAL
+// ============================================================================
+
+function initializeHelpModal() {
+  const helpBtn = document.getElementById('help-btn');
+  const helpModal = document.getElementById('help-modal');
+  const helpCloseBtn = helpModal?.querySelector('.help-close-btn');
+  const helpTabs = helpModal?.querySelectorAll('.help-tab');
+  const helpContents = helpModal?.querySelectorAll('.help-content');
+
+  if (!helpBtn || !helpModal) {
+    console.warn('Help modal elements not found');
+    return;
+  }
+
+  // Open modal
+  helpBtn.addEventListener('click', () => {
+    helpModal.classList.remove('hidden');
+    // Switch to relevant tab based on current main tab
+    const activeTab = currentTab === 'sequencer' ? 'sequencer' : 'instrument';
+    switchHelpTab(activeTab);
+  });
+
+  // Close modal
+  helpCloseBtn?.addEventListener('click', () => {
+    helpModal.classList.add('hidden');
+  });
+
+  // Close on backdrop click
+  helpModal.addEventListener('click', (e) => {
+    if (e.target === helpModal) {
+      helpModal.classList.add('hidden');
+    }
+  });
+
+  // Close on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !helpModal.classList.contains('hidden')) {
+      helpModal.classList.add('hidden');
+    }
+  });
+
+  // Tab switching
+  helpTabs?.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const tabName = tab.dataset.helpTab;
+      switchHelpTab(tabName);
+    });
+  });
+
+  function switchHelpTab(tabName) {
+    // Update tab buttons
+    helpTabs?.forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.helpTab === tabName);
+    });
+
+    // Update content visibility
+    helpContents?.forEach(content => {
+      const contentId = content.id.replace('help-', '');
+      content.classList.toggle('active', contentId === tabName);
+    });
+  }
 }
 
 // Filter commands based on search term

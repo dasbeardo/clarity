@@ -47,6 +47,7 @@
           <button id="seq-play-header" class="transport-btn play-btn" title="Play/Pause Sequencer">▶</button>
           <button id="seq-stop-header" class="transport-btn stop-btn" title="Stop Sequencer">■</button>
         </div>
+        <button id="help-btn" class="header-help-btn" title="Help">?</button>
       </div>
       <div id="parameters" class="tab-content"></div>
       <div id="sequencer-editor" class="tab-content hidden"></div>
@@ -206,6 +207,146 @@
   <div id="command-modal" class="hidden">
     <input type="text" id="command-search" placeholder="Search commands..." autocomplete="off">
     <div id="command-list"></div>
+  </div>
+
+  <!-- Help Modal -->
+  <div id="help-modal" class="help-modal hidden">
+    <div class="help-modal-content">
+      <div class="help-modal-header">
+        <div class="help-tabs">
+          <button class="help-tab active" data-help-tab="instrument">Instrument</button>
+          <button class="help-tab" data-help-tab="sequencer">Sequencer</button>
+        </div>
+        <button class="help-close-btn">&times;</button>
+      </div>
+      <div class="help-modal-body">
+        <!-- Instrument Help -->
+        <div id="help-instrument" class="help-content active">
+          <h2>Building Instruments</h2>
+          <p>Define your sound by writing text. Each component starts with a header, followed by indented parameters.</p>
+
+          <h3>Oscillators</h3>
+          <pre>oscillator lead
+  wave sawtooth
+  octave 0
+  volume 60
+  attack 10
+  decay 200
+  sustain 80
+  release 400
+  pitch vibrato
+  distortion crunch
+  color cyan</pre>
+
+          <div class="help-table">
+            <h4>Wave Types</h4>
+            <table>
+              <tr><td><code>sine</code></td><td>Pure, clean tone - bass, sub</td></tr>
+              <tr><td><code>square</code></td><td>Hollow, retro - leads, chiptune</td></tr>
+              <tr><td><code>sawtooth</code></td><td>Bright, buzzy - leads, brass</td></tr>
+              <tr><td><code>triangle</code></td><td>Soft, muted - flutes, pads</td></tr>
+              <tr><td><code>noise</code></td><td>White noise - drums, textures</td></tr>
+            </table>
+          </div>
+
+          <div class="help-table">
+            <h4>Envelope (ADSR)</h4>
+            <table>
+              <tr><td><code>attack</code></td><td>Time to reach peak (ms)</td></tr>
+              <tr><td><code>decay</code></td><td>Time to fall to sustain (ms)</td></tr>
+              <tr><td><code>sustain</code></td><td>Level while held (0-100)</td></tr>
+              <tr><td><code>release</code></td><td>Fade out time (ms)</td></tr>
+            </table>
+          </div>
+
+          <h3>LFO (Vibrato)</h3>
+          <pre>lfo vibrato
+  wave sine
+  rate 5.5
+  depth 12</pre>
+          <p>Add <code>pitch vibrato</code> to an oscillator to apply it.</p>
+
+          <h3>Distortion</h3>
+          <pre>distortion crunch
+  drive 50
+  mix 70</pre>
+          <p>Add <code>distortion crunch</code> to an oscillator or master.</p>
+
+          <h3>Master</h3>
+          <pre>master
+  volume 75</pre>
+
+          <h3>Tips</h3>
+          <ul>
+            <li><strong>Kicks:</strong> sine, octave -2, fast attack, short decay, sustain 0</li>
+            <li><strong>Snares:</strong> noise, fast attack, medium decay</li>
+            <li><strong>Bass:</strong> sawtooth/square, octave -1, high sustain</li>
+            <li><strong>Leads:</strong> square/saw, add vibrato LFO, medium attack</li>
+            <li><strong>Pads:</strong> triangle/sine, slow attack, long release</li>
+          </ul>
+        </div>
+
+        <!-- Sequencer Help -->
+        <div id="help-sequencer" class="help-content">
+          <h2>Writing Sequences</h2>
+          <p>Each oscillator can have its own pattern. Steps are space-separated.</p>
+
+          <pre>bpm 120
+swing 55
+
+oscillator kick
+  sequence c2 - - - c2 - - - c2 - - - c2 - - -
+
+oscillator bass
+  sequence c2>e2 e2 - - g2 - - -</pre>
+
+          <h3>Note Syntax</h3>
+          <div class="help-table">
+            <table>
+              <tr><td><code>c4</code></td><td>Note + octave</td></tr>
+              <tr><td><code>f#3</code> <code>eb5</code></td><td>Sharps and flats</td></tr>
+              <tr><td><code>-</code></td><td>Rest (silence)</td></tr>
+            </table>
+          </div>
+
+          <h3>Modifiers</h3>
+          <div class="help-table">
+            <table>
+              <tr><td><code>c4@80</code></td><td>Velocity (0-100)</td></tr>
+              <tr><td><code>c4:50</code></td><td>Gate/duration (0-100%)</td></tr>
+              <tr><td><code>c4~</code></td><td>Tie (hold into next step)</td></tr>
+              <tr><td><code>c4@80:50~</code></td><td>Combined</td></tr>
+            </table>
+          </div>
+
+          <h3>Chords</h3>
+          <pre>[c4,e4,g4]              # C major
+[c4~,e4~,g4] [c4~,e4~,a4]   # Voice leading</pre>
+          <p>Use <code>~</code> on individual notes to hold them while others change.</p>
+
+          <h3>Slides</h3>
+          <pre>c4>e4    # Glide from C4 to E4
+e2>g2 g2 g2>c3   # Bass slides</pre>
+          <p>Slides auto-sustain for smooth pitch glides.</p>
+
+          <h3>Swing</h3>
+          <pre>swing 55   # Subtle groove
+swing 67   # Heavy triplet feel</pre>
+          <p>50 = straight, 67 = full triplet swing.</p>
+
+          <h3>Expression Tips</h3>
+          <ul>
+            <li><strong>Ghost notes:</strong> <code>c4@30</code> for subtle hits</li>
+            <li><strong>Staccato:</strong> <code>c4:25</code> for punchy notes</li>
+            <li><strong>Long notes:</strong> <code>c4~ c4~ c4~ c4</code></li>
+            <li><strong>Build-up:</strong> <code>c4@50 c4@70 c4@90 c4@100</code></li>
+          </ul>
+
+          <h3>Track Colors</h3>
+          <p>Add <code>color red</code> (or <code>#ff3300</code>) to oscillators. Indicators light up during playback.</p>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="chords.js"></script>
