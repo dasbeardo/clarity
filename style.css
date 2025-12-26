@@ -42,6 +42,56 @@ body {
   color: #969896;
 }
 
+.header-spacer {
+  flex: 1;
+}
+
+/* Sequencer transport controls in header */
+.sequencer-transport-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sequencer-transport-header .transport-label {
+  font-size: 11px;
+  color: #636567;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-right: 4px;
+}
+
+.sequencer-transport-header .transport-btn {
+  background: #282a2e;
+  border: 1px solid #373b41;
+  border-radius: 4px;
+  color: #969896;
+  font-size: 10px;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.sequencer-transport-header .transport-btn:hover {
+  border-color: #5fd3bc;
+  color: #5fd3bc;
+}
+
+.sequencer-transport-header .transport-btn.playing {
+  background: #2d4a44;
+  border-color: #5fd3bc;
+  color: #5fd3bc;
+}
+
+.sequencer-transport-header .stop-btn:hover {
+  border-color: #ff8c66;
+  color: #ff8c66;
+}
+
 .editor-tabs {
   display: flex;
   gap: 0;

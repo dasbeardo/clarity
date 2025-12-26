@@ -41,6 +41,12 @@
           <button class="tab active" data-tab="synth">.instrument</button>
           <button class="tab" data-tab="sequencer">.sequence</button>
         </div>
+        <div class="header-spacer"></div>
+        <div class="sequencer-transport-header" id="sequencer-transport-header">
+          <span class="transport-label">seq</span>
+          <button id="seq-play-header" class="transport-btn play-btn" title="Play/Pause Sequencer">▶</button>
+          <button id="seq-stop-header" class="transport-btn stop-btn" title="Stop Sequencer">■</button>
+        </div>
       </div>
       <div id="parameters" class="tab-content"></div>
       <div id="sequencer-editor" class="tab-content hidden"></div>
@@ -58,11 +64,6 @@
         <!-- Dynamically populated with track indicators -->
       </div>
 
-      <!-- Compact keyboard button (shown during sequencer playback) -->
-      <div id="keyboard-compact" class="keyboard-compact" tabindex="0" style="display: none;">
-        <span class="keyboard-icon">&#9000;</span>
-        <span class="keyboard-compact-label">QWERTY</span>
-      </div>
 
       <!-- Virtual Keyboard Panel -->
       <div class="controls-section keyboard-panel">

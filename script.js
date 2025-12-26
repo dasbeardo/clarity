@@ -1822,6 +1822,16 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeSequencer();
     initializeSequencerUI();
 
+    // Set up header transport controls
+    const headerPlayBtn = document.getElementById('seq-play-header');
+    const headerStopBtn = document.getElementById('seq-stop-header');
+    if (headerPlayBtn) {
+      headerPlayBtn.addEventListener('click', toggleSequencerPlayback);
+    }
+    if (headerStopBtn) {
+      headerStopBtn.addEventListener('click', stopSequencer);
+    }
+
     console.log('Systems initialized, calling initialize()...');
 
     // Call the main initialize function
@@ -1988,8 +1998,6 @@ function createTrackIndicators() {
 function updateTrackVisualizer() {
   const noteDisplay = document.getElementById('note-display');
   const trackVisualizer = document.getElementById('track-visualizer');
-  const keyboardPanel = document.querySelector('.keyboard-panel');
-  const keyboardCompact = document.getElementById('keyboard-compact');
 
   if (!noteDisplay || !trackVisualizer) return;
 
@@ -1997,19 +2005,15 @@ function updateTrackVisualizer() {
   const isSequencerPlaying = sequencer && sequencer.isPlaying;
 
   if (!isSequencerPlaying) {
-    // Show note display and full keyboard for keyboard/MIDI input
+    // Show note display for keyboard/MIDI input
     noteDisplay.style.display = 'flex';
     trackVisualizer.style.display = 'none';
-    if (keyboardPanel) keyboardPanel.style.display = '';
-    if (keyboardCompact) keyboardCompact.style.display = 'none';
     return;
   }
 
-  // Show track visualizer and compact keyboard for sequencer
+  // Show track visualizer for sequencer (keyboard stays visible)
   noteDisplay.style.display = 'none';
   trackVisualizer.style.display = 'flex';
-  if (keyboardPanel) keyboardPanel.style.display = 'none';
-  if (keyboardCompact) keyboardCompact.style.display = 'flex';
 
   // Reset all indicators
   document.querySelectorAll('.track-indicator').forEach(el => {
@@ -3552,8 +3556,8 @@ document.addEventListener("click", (e) => {
 
 document.addEventListener("keydown", (e) => {
   const target = e.target;
-  // Accept input from both full keyboard and compact button
-  if (target.id !== "virtual-keyboard" && target.id !== "keyboard-compact") return;
+  // Accept input from virtual keyboard
+  if (target.id !== "virtual-keyboard") return;
 
   const key = e.key.toLowerCase();
 
@@ -3599,8 +3603,8 @@ document.addEventListener("keydown", (e) => {
 
 document.addEventListener("keyup", (e) => {
   const target = e.target;
-  // Accept input from both full keyboard and compact button
-  if (target.id !== "virtual-keyboard" && target.id !== "keyboard-compact") return;
+  // Accept input from virtual keyboard
+  if (target.id !== "virtual-keyboard") return;
 
   const key = e.key.toLowerCase();
   const midiNote = keyToNote[key];
@@ -4711,6 +4715,14 @@ function toggleSequencerPlayback() {
  * Start sequencer playback
  */
 function playSequencer() {
+  // Update header transport button
+  const headerPlayBtn = document.getElementById('seq-play-header');
+  if (headerPlayBtn) {
+    headerPlayBtn.textContent = '⏸';
+    headerPlayBtn.classList.add('playing');
+  }
+
+  // Update sequencer section button (if visible)
   const playBtn = document.getElementById('seq-play');
   if (playBtn) {
     playBtn.textContent = 'Pause';
@@ -4750,6 +4762,14 @@ function playSequencer() {
 function stopSequencer() {
   sequencer.stop();
 
+  // Update header transport button
+  const headerPlayBtn = document.getElementById('seq-play-header');
+  if (headerPlayBtn) {
+    headerPlayBtn.textContent = '▶';
+    headerPlayBtn.classList.remove('playing');
+  }
+
+  // Update sequencer section button (if visible)
   const playBtn = document.getElementById('seq-play');
   if (playBtn) {
     playBtn.textContent = 'Play';
