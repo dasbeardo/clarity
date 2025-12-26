@@ -1,0 +1,129 @@
+# CLARITY SHOWCASE - "Digital Dreams"
+# Copy each section into the respective tab
+
+# ═══════════════════════════════════════════════════════════════
+# .instrument TAB
+# ═══════════════════════════════════════════════════════════════
+
+oscillator kick
+  wave sine
+  octave -2
+  volume 95
+  attack 1
+  decay 150
+  sustain 0
+  release 40
+  color red
+
+oscillator snare
+  wave noise
+  volume 55
+  attack 1
+  decay 100
+  sustain 0
+  release 80
+  color white
+
+oscillator hat
+  wave noise
+  volume 25
+  attack 1
+  decay 30
+  sustain 0
+  release 20
+  color cyan
+
+oscillator bass
+  wave sawtooth
+  octave -1
+  volume 70
+  attack 5
+  decay 200
+  sustain 75
+  release 100
+  distortion grit
+  color orange
+
+oscillator lead
+  wave square
+  octave 0
+  volume 45
+  attack 15
+  decay 300
+  sustain 50
+  release 400
+  pitch vib
+  distortion edge
+  color magenta
+
+oscillator pad
+  wave triangle
+  octave 0
+  volume 35
+  attack 250
+  decay 200
+  sustain 80
+  release 600
+  color purple
+
+oscillator arp
+  wave triangle
+  octave 1
+  volume 30
+  attack 3
+  decay 60
+  sustain 30
+  release 100
+  color pink
+
+lfo vib
+  wave sine
+  rate 5.5
+  depth 12
+
+distortion grit
+  drive 30
+  mix 50
+
+distortion edge
+  drive 45
+  mix 60
+
+master
+  volume 75
+
+
+# ═══════════════════════════════════════════════════════════════
+# .sequence TAB
+# ═══════════════════════════════════════════════════════════════
+
+bpm 108
+swing 55
+
+# KICK - Punchy four-on-floor with ghost notes and variation
+oscillator kick
+  sequence c2@100 - - c2@40 c2@100 - c2@30 - c2@100 - - c2@50 c2@100 - c2@35 - c2@100 - - c2@45 c2@100 - c2@25 - c2@100 - c2@60 - c2@100 c2@70 - - c2@100 - - c2@30 c2@100 - c2@40 - c2@100 - - c2@55 c2@100 - c2@35 - c2@100 - c2@50 - c2@90 - - c2@100 c2@100 - c2@45 - c2@100 - - -
+
+# SNARE - Backbeat with ghost snares for groove
+oscillator snare
+  sequence - - - - c4@100 - - - - - - - c4@100 - - - - - - - c4@100 - c4@30 - - - - - c4@100 - c4@25 - - - - - c4@100 - - - - - c4@35 - c4@100 - - - - - - - c4@100 - - c4@40 - - - - c4@100 c4@100 - -
+
+# HI-HAT - Driving 16ths with velocity groove
+oscillator hat
+  sequence c5@60 c5@30 c5@45 c5@30 c5@70 c5@25 c5@50 c5@35 c5@60 c5@30 c5@45 c5@30 c5@70 c5@25 c5@50 c5@35 c5@65 c5@25 c5@50 c5@30 c5@75 c5@30 c5@45 c5@35 c5@60 c5@25 c5@55 c5@30 c5@70 c5@30 c5@45 c5@40 c5@60 c5@30 c5@45 c5@30 c5@70 c5@25 c5@50 c5@35 c5@65 c5@30 c5@50 c5@25 c5@75 c5@35 c5@45 c5@30 c5@60 c5@25 c5@55 c5@35 c5@70 c5@30 c5@50 c5@40 c5@80 c5@40 c5@60 c5@50 c5@90 c5@50 c5@70 c5@60
+
+# BASS - Slides and groove
+oscillator bass
+  sequence e2>g2 g2 - - a2>e2 e2 - - e2>g2 g2 - - c2>e2 e2 - - e2>g2 g2 g2@80 - a2>e2 e2 - e2@60 e2>g2 g2 - - a2>c3 c3>a2 a2>e2 - e2>g2 g2 - - a2>e2 e2 - - e2>g2 g2 g2@70 - c2>e2 e2 - - e2>a2 a2 a2@80 - g2>e2 e2 - - c2>g2 g2>e2 e2>c2 c2 c2>e2 e2>g2 g2 -
+
+# LEAD - Melodic phrases with slides and expression
+oscillator lead
+  sequence - - - - - - - - e4>g4 g4@80 - - a4@90~ a4 g4>e4 e4 - - - - - - - - g4>a4 a4@85 a4>c5 c5@90 c5~ c5 b4>g4 g4@70 - - - - - - - - e4>g4 g4@75 - - a4@95~ a4 a4>e5 e5@90 e5~ e5 - - - - - - c5>a4 a4@80 g4>e4 e4 e4~ e4 - -
+
+# PAD - Voice leading chord progression (i - iv - VII - III in E minor)
+oscillator pad
+  sequence [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [a3~,c4~,e4~] [a3~,c4~,e4~] [a3~,c4~,e4~] [a3~,c4~,e4~] [a3~,c4~,e4~] [a3~,c4~,e4~] [a3~,c4~,e4~] [a3,c4,e4] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [g3~,b3~,d4~] [g3~,b3~,d4~] [g3~,b3~,d4~] [g3~,b3~,d4~] [g3~,b3~,d4~] [g3~,b3~,d4~] [g3~,b3~,d4~] [g3,b3,d4] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [c3~,e3~,g3~] [c3~,e3~,g3~] [c3~,e3~,g3~] [c3~,e3~,g3~] [c3~,e3~,g3~] [c3~,e3~,g3~] [c3~,e3~,g3~] [c3,e3,g3] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [b2~,d3~,f#3~] [b2~,d3~,f#3~] [b2~,d3~,f#3~] [b2~,d3~,f#3~] [b2~,d3~,f#3~] [b2~,d3~,f#3~] [b2~,d3~,f#3~] [b2,d3,f#3]
+
+# ARP - Rhythmic pattern following the chord progression
+oscillator arp
+  sequence e5@70 - g5@50 - b5@80 - g5@45 - e5@65 - g5@55 - b5@75 - g5@40 - a5@70 - c6@50 - e6@80 - c6@45 - a5@65 - c6@55 - e6@75 - c6@40 - d5@70 - f#5@50 - a5@80 - f#5@45 - d5@65 - f#5@55 - a5@75 - f#5@40 - g5@75 - b5@55 - d6@85 - b5@50 - g5@70 b5@60 d6@80 b5@45 e5@70 - g5@50 - b5@80 - g5@45 - e5@65 - g5@55 - b5@75 g5@50 e5@40 - c5@70 - e5@50 - g5@80 - e5@45 - c5@65 - e5@55 - g5@75 - e5@40 - d5@70 - f#5@50 - a5@80 - f#5@45 - d5@65 - f#5@55 - a5@75 - f#5@40 - b4@75 - d5@55 - f#5@85 - d5@50 - b4@70 d5@60 f#5@80 - b5>f#5 f#5>b4 - -
