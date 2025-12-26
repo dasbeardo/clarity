@@ -2376,52 +2376,116 @@ function focusBlock(blockElement, atEnd = false) {
 function initializeBlocks() {
   const initialLines = [];
 
-  // Create default document using new architecture syntax
-  initialLines.push('# Welcome to Clarity');
+  // "Digital Dreams" - Showcase song for Clarity Sequencer
+  initialLines.push('# Digital Dreams - Clarity Showcase');
   initialLines.push('');
 
-  // Vibrato controls
-  initialLines.push('variable vibrato_depth = 20');
-  initialLines.push('variable vibrato_rate = 5');
+  // Kick drum
+  initialLines.push('oscillator kick');
+  initialLines.push('  wave sine');
+  initialLines.push('  octave -2');
+  initialLines.push('  volume 95');
+  initialLines.push('  attack 1');
+  initialLines.push('  decay 150');
+  initialLines.push('  sustain 0');
+  initialLines.push('  release 40');
+  initialLines.push('  color red');
   initialLines.push('');
 
-  // Volume controls
-  initialLines.push('variable lead_volume = 60');
-  initialLines.push('variable bass_volume = 40');
+  // Snare
+  initialLines.push('oscillator snare');
+  initialLines.push('  wave noise');
+  initialLines.push('  volume 55');
+  initialLines.push('  attack 1');
+  initialLines.push('  decay 100');
+  initialLines.push('  sustain 0');
+  initialLines.push('  release 80');
+  initialLines.push('  color white');
   initialLines.push('');
 
-  // Lead oscillator with LFO modulation
-  initialLines.push('oscillator lead');
-  initialLines.push('  wave sawtooth');
-  initialLines.push('  octave 0');
-  initialLines.push('  volume lead_volume');
-  initialLines.push('  pitch vibrato');
+  // Hi-hat
+  initialLines.push('oscillator hat');
+  initialLines.push('  wave noise');
+  initialLines.push('  volume 25');
+  initialLines.push('  attack 1');
+  initialLines.push('  decay 30');
+  initialLines.push('  sustain 0');
+  initialLines.push('  release 20');
+  initialLines.push('  color cyan');
   initialLines.push('');
 
-  // Bass oscillator
+  // Bass with distortion
   initialLines.push('oscillator bass');
-  initialLines.push('  wave sine');
+  initialLines.push('  wave sawtooth');
   initialLines.push('  octave -1');
-  initialLines.push('  volume bass_volume');
+  initialLines.push('  volume 70');
+  initialLines.push('  attack 5');
+  initialLines.push('  decay 200');
+  initialLines.push('  sustain 75');
+  initialLines.push('  release 100');
+  initialLines.push('  distortion grit');
+  initialLines.push('  color orange');
   initialLines.push('');
 
-  // LFO for vibrato (order doesn't matter - parser handles forward references)
-  initialLines.push('lfo vibrato');
-  initialLines.push('  rate vibrato_rate + 2');
-  initialLines.push('  depth vibrato_depth * 0.5');
+  // Lead with vibrato and distortion
+  initialLines.push('oscillator lead');
+  initialLines.push('  wave square');
+  initialLines.push('  octave 0');
+  initialLines.push('  volume 45');
+  initialLines.push('  attack 15');
+  initialLines.push('  decay 300');
+  initialLines.push('  sustain 50');
+  initialLines.push('  release 400');
+  initialLines.push('  pitch vib');
+  initialLines.push('  distortion edge');
+  initialLines.push('  color magenta');
+  initialLines.push('');
+
+  // Pad for chords
+  initialLines.push('oscillator pad');
+  initialLines.push('  wave triangle');
+  initialLines.push('  octave 0');
+  initialLines.push('  volume 35');
+  initialLines.push('  attack 250');
+  initialLines.push('  decay 200');
+  initialLines.push('  sustain 80');
+  initialLines.push('  release 600');
+  initialLines.push('  color purple');
+  initialLines.push('');
+
+  // Arpeggiator
+  initialLines.push('oscillator arp');
+  initialLines.push('  wave triangle');
+  initialLines.push('  octave 1');
+  initialLines.push('  volume 30');
+  initialLines.push('  attack 3');
+  initialLines.push('  decay 60');
+  initialLines.push('  sustain 30');
+  initialLines.push('  release 100');
+  initialLines.push('  color pink');
+  initialLines.push('');
+
+  // LFO for vibrato
+  initialLines.push('lfo vib');
   initialLines.push('  wave sine');
+  initialLines.push('  rate 5.5');
+  initialLines.push('  depth 12');
   initialLines.push('');
 
-  // Master section
+  // Distortion effects
+  initialLines.push('distortion grit');
+  initialLines.push('  drive 30');
+  initialLines.push('  mix 50');
+  initialLines.push('');
+
+  initialLines.push('distortion edge');
+  initialLines.push('  drive 45');
+  initialLines.push('  mix 60');
+  initialLines.push('');
+
+  // Master
   initialLines.push('master');
-  initialLines.push('  volume 80');
-  initialLines.push('  attack 10');
-  initialLines.push('  sustain 100');
-  initialLines.push('  release 500');
-  initialLines.push('');
-
-  // Note: note-specific overrides are not working yet in the parser
-  // Will be fixed later: note c4 with variable vibrato_depth = 40
+  initialLines.push('  volume 75');
 
   parametersTextbox.contentEditable = 'true';
   parametersTextbox.innerHTML = '';
@@ -4478,13 +4542,29 @@ document.addEventListener("keydown", (event) => {
 // ============================================================================
 
 let currentTab = 'synth';
-let sequencerEditorContent = `bpm 140
+let sequencerEditorContent = `bpm 108
+swing 55
 
-oscillator lead
-  sequence e5 e5 - e5 - c5 e5 - g5 - - - g4 - - -
+oscillator kick
+  sequence c2@100 - - c2@40 c2@100 - c2@30 - c2@100 - - c2@50 c2@100 - c2@35 - c2@100 - - c2@45 c2@100 - c2@25 - c2@100 - c2@60 - c2@100 c2@70 - - c2@100 - - c2@30 c2@100 - c2@40 - c2@100 - - c2@55 c2@100 - c2@35 - c2@100 - c2@50 - c2@90 - - c2@100 c2@100 - c2@45 - c2@100 - - -
+
+oscillator snare
+  sequence - - - - c4@100 - - - - - - - c4@100 - - - - - - - c4@100 - c4@30 - - - - - c4@100 - c4@25 - - - - - c4@100 - - - - - c4@35 - c4@100 - - - - - - - c4@100 - - c4@40 - - - - c4@100 c4@100 - -
+
+oscillator hat
+  sequence c5@60 c5@30 c5@45 c5@30 c5@70 c5@25 c5@50 c5@35 c5@60 c5@30 c5@45 c5@30 c5@70 c5@25 c5@50 c5@35 c5@65 c5@25 c5@50 c5@30 c5@75 c5@30 c5@45 c5@35 c5@60 c5@25 c5@55 c5@30 c5@70 c5@30 c5@45 c5@40 c5@60 c5@30 c5@45 c5@30 c5@70 c5@25 c5@50 c5@35 c5@65 c5@30 c5@50 c5@25 c5@75 c5@35 c5@45 c5@30 c5@60 c5@25 c5@55 c5@35 c5@70 c5@30 c5@50 c5@40 c5@80 c5@40 c5@60 c5@50 c5@90 c5@50 c5@70 c5@60
 
 oscillator bass
-  sequence c3 - - c3 - - g2 - c3 - - - g2 - - -`;
+  sequence e2>g2 g2 - - a2>e2 e2 - - e2>g2 g2 - - c2>e2 e2 - - e2>g2 g2 g2@80 - a2>e2 e2 - e2@60 e2>g2 g2 - - a2>c3 c3>a2 a2>e2 - e2>g2 g2 - - a2>e2 e2 - - e2>g2 g2 g2@70 - c2>e2 e2 - - e2>a2 a2 a2@80 - g2>e2 e2 - - c2>g2 g2>e2 e2>c2 c2 c2>e2 e2>g2 g2 -
+
+oscillator lead
+  sequence - - - - - - - - e4>g4 g4@80 - - a4@90~ a4 g4>e4 e4 - - - - - - - - g4>a4 a4@85 a4>c5 c5@90 c5~ c5 b4>g4 g4@70 - - - - - - - - e4>g4 g4@75 - - a4@95~ a4 a4>e5 e5@90 e5~ e5 - - - - - - c5>a4 a4@80 g4>e4 e4 e4~ e4 - -
+
+oscillator pad
+  sequence [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [a3~,c4~,e4~] [a3~,c4~,e4~] [a3~,c4~,e4~] [a3~,c4~,e4~] [a3~,c4~,e4~] [a3~,c4~,e4~] [a3~,c4~,e4~] [a3,c4,e4] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [g3~,b3~,d4~] [g3~,b3~,d4~] [g3~,b3~,d4~] [g3~,b3~,d4~] [g3~,b3~,d4~] [g3~,b3~,d4~] [g3~,b3~,d4~] [g3,b3,d4] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [c3~,e3~,g3~] [c3~,e3~,g3~] [c3~,e3~,g3~] [c3~,e3~,g3~] [c3~,e3~,g3~] [c3~,e3~,g3~] [c3~,e3~,g3~] [c3,e3,g3] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [d3~,f#3~,a3~] [b2~,d3~,f#3~] [b2~,d3~,f#3~] [b2~,d3~,f#3~] [b2~,d3~,f#3~] [b2~,d3~,f#3~] [b2~,d3~,f#3~] [b2~,d3~,f#3~] [b2,d3,f#3]
+
+oscillator arp
+  sequence e5@70 - g5@50 - b5@80 - g5@45 - e5@65 - g5@55 - b5@75 - g5@40 - a5@70 - c6@50 - e6@80 - c6@45 - a5@65 - c6@55 - e6@75 - c6@40 - d5@70 - f#5@50 - a5@80 - f#5@45 - d5@65 - f#5@55 - a5@75 - f#5@40 - g5@75 - b5@55 - d6@85 - b5@50 - g5@70 b5@60 d6@80 b5@45 e5@70 - g5@50 - b5@80 - g5@45 - e5@65 - g5@55 - b5@75 g5@50 e5@40 - c5@70 - e5@50 - g5@80 - e5@45 - c5@65 - e5@55 - g5@75 - e5@40 - d5@70 - f#5@50 - a5@80 - f#5@45 - d5@65 - f#5@55 - a5@75 - f#5@40 - b4@75 - d5@55 - f#5@85 - d5@50 - b4@70 d5@60 f#5@80 - b5>f#5 f#5>b4 - -`;
 
 /**
  * Initialize sequencer UI (tabs, editor, controls)
