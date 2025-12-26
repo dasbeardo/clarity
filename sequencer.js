@@ -13,7 +13,8 @@ class Sequencer {
     this.onStepChange = null; // Callback for UI updates
     this._triggerNote = null; // Store callback for BPM updates
     this._stopNote = null; // Store stop callback for ties
-    this.activeNotes = new Map(); // Track oscillator -> noteId for tie handling
+    // Track oscillator -> Map<noteName, noteId> for per-note tie handling (supports chords)
+    this.activeNotes = new Map();
   }
 
   /**
@@ -22,6 +23,7 @@ class Sequencer {
    * @returns {object} { bpm, tracks }
    */
   parse(text) {
+    console.log('[PARSE] Parsing sequencer text...');
     const lines = text.split('\n');
     let bpm = 120;
     let swing = 50;
@@ -82,6 +84,17 @@ class Sequencer {
     this.tracks = tracks;
     this.maxSteps = Math.max(...tracks.map(t => t.steps.length), 0);
 
+    // Debug: Log parsed tracks summary
+    console.log(`[PARSE] Complete: bpm=${bpm}, swing=${swing}, tracks=${tracks.length}, maxSteps=${this.maxSteps}`);
+    for (const track of tracks) {
+      const stepSummary = track.steps.map(s => {
+        if (s.type === 'rest') return '-';
+        if (s.type === 'chord') return `[${s.notes.map(n => n.noteName + (n.tie ? '~' : '') + (n.slideTo ? '>' : '')).join(',')}]`;
+        return s.noteName + (s.tie ? '~' : '') + (s.slideTo ? '>' + s.slideTo.noteName : '');
+      }).join(' ');
+      console.log(`[PARSE] Track "${track.oscillator}": ${stepSummary}`);
+    }
+
     return { bpm, swing, tracks };
   }
 
@@ -92,40 +105,117 @@ class Sequencer {
    *   - Velocity: @N (0-100), e.g. c4@80
    *   - Gate: :N (0-100% of step), e.g. c4:50
    *   - Tie: ~ (extend to next step), e.g. c4~
-   *   - Combined: c4@80:50~
-   * @returns {object} { type: 'note'|'rest', frequency?, noteName?, velocity, gate, tie }
+   *   - Slide: > (slide to next note), e.g. c4>e4
+   *   - Chord: [c4,e4,g4] (multiple notes)
+   *   - Combined: c4@80:50~, [c4~,e4@80,g4>a4]
+   * @returns {object} { type: 'note'|'chord'|'rest', ... }
    */
   _parseStep(token) {
     if (token === '-') {
-      return { type: 'rest', velocity: 100, gate: 100, tie: false };
+      return { type: 'rest' };
     }
 
+    // Check if this is a chord: [c4,e4,g4]
+    if (token.startsWith('[') && token.endsWith(']')) {
+      const inner = token.slice(1, -1);
+      const noteTokens = inner.split(',');
+      const notes = noteTokens.map(t => this._parseSingleNote(t.trim())).filter(n => n !== null);
+
+      if (notes.length === 0) {
+        return { type: 'rest' };
+      }
+
+      return {
+        type: 'chord',
+        notes: notes
+      };
+    }
+
+    // Single note (possibly with slide)
+    const note = this._parseSingleNote(token);
+    if (!note) {
+      return { type: 'rest' };
+    }
+
+    return {
+      type: 'note',
+      ...note
+    };
+  }
+
+  /**
+   * Parse a single note with modifiers (used for both standalone and chord notes)
+   * @param {string} token - e.g. c4, c4@80:50~, c4>e4
+   * @returns {object|null} { noteName, frequency, velocity, gate, tie, slideTo }
+   */
+  _parseSingleNote(token) {
+    // Check for slide: c4>e4 or c4@80>e4@90
+    const slideMatch = token.match(/^(.+?)>(.+)$/);
+    if (slideMatch) {
+      console.log(`[PARSE] Slide detected: "${token}" -> from="${slideMatch[1]}", to="${slideMatch[2]}"`);
+      const fromNote = this._parseNoteWithModifiers(slideMatch[1]);
+      const toNote = this._parseNoteWithModifiers(slideMatch[2]);
+
+      if (!fromNote || !toNote) {
+        console.warn(`Invalid slide: ${token}`);
+        return null;
+      }
+
+      const result = {
+        ...fromNote,
+        tie: true, // Slides automatically sustain (imply tie)
+        gate: 100, // Full gate for smooth slide
+        slideTo: {
+          noteName: toNote.noteName,
+          frequency: toNote.frequency,
+          velocity: toNote.velocity // Target velocity for slide
+        }
+      };
+      console.log(`[PARSE] Slide result: ${result.noteName} -> ${result.slideTo.noteName} (${result.frequency.toFixed(2)}Hz -> ${result.slideTo.frequency.toFixed(2)}Hz) [auto-tie]`);
+      return result;
+    }
+
+    // Regular note without slide
+    return this._parseNoteWithModifiers(token);
+  }
+
+  /**
+   * Parse note name with modifiers (no slide handling)
+   * @param {string} token - e.g. c4, c4@80, c4:50, c4@80:50~
+   * @returns {object|null} { noteName, frequency, velocity, gate, tie, slideTo: null }
+   */
+  _parseNoteWithModifiers(token) {
     // Match note with optional modifiers: c4, c4@80, c4:50, c4@80:50, c4~, c4@80:50~
     const match = token.match(/^([a-g][#b]?\d)(?:@(\d+))?(?::(\d+))?([~])?$/i);
     if (!match) {
       console.warn(`Invalid note: ${token}`);
-      return { type: 'rest', velocity: 100, gate: 100, tie: false };
+      return null;
     }
 
     const [, noteStr, velocityStr, gateStr, tieStr] = match;
+
+    // Debug log for tie parsing
+    if (tieStr) {
+      console.log(`[PARSE] Tie detected in "${token}": tieStr="${tieStr}"`);
+    }
 
     // Parse note components
     const noteMatch = noteStr.match(/^([a-g])([#b]?)(\d)$/i);
     if (!noteMatch) {
       console.warn(`Invalid note format: ${noteStr}`);
-      return { type: 'rest', velocity: 100, gate: 100, tie: false };
+      return null;
     }
 
     const [, letter, accidental, octave] = noteMatch;
     const frequency = this._noteToFrequency(letter, accidental, parseInt(octave, 10));
 
     return {
-      type: 'note',
       noteName: noteStr.toLowerCase(),
       frequency,
       velocity: velocityStr ? parseInt(velocityStr, 10) : 100,
       gate: gateStr ? parseInt(gateStr, 10) : 100,
-      tie: !!tieStr
+      tie: !!tieStr,
+      slideTo: null
     };
   }
 
@@ -214,47 +304,91 @@ class Sequencer {
           : { type: 'rest' };
         const prevStep = this.currentStep > 0 && (this.currentStep - 1) < track.steps.length
           ? track.steps[this.currentStep - 1]
-          : { type: 'rest', tie: false };
+          : { type: 'rest' };
 
-        // Handle previous note cleanup and tie logic
-        const activeNoteId = this.activeNotes.get(trackKey);
-        if (activeNoteId) {
-          // Check if previous note should continue (was tied AND current is same note)
-          const shouldContinue = prevStep.tie &&
-                                 step.type === 'note' &&
-                                 step.noteName === prevStep.noteName;
+        // Get notes array for current and previous steps
+        const currentNotes = this._getStepNotes(step);
+        const prevNotes = this._getStepNotes(prevStep);
 
-          if (shouldContinue) {
-            // Note continues - don't stop or restart, skip to next track
-            continue;
-          } else {
-            // Tie chain ended (rest, different note, or prev wasn't tied) - stop the note
+        console.log(`Step ${this.currentStep}: current=[${currentNotes.map(n => n.noteName + (n.tie ? '~' : '') + (n.slideTo ? '>'+n.slideTo.noteName : '')).join(',')}] prev=[${prevNotes.map(n => n.noteName + (n.tie ? '~' : '')).join(',')}]`);
+
+        // Initialize track's active notes map if needed
+        if (!this.activeNotes.has(trackKey)) {
+          this.activeNotes.set(trackKey, new Map());
+        }
+        const trackActiveNotes = this.activeNotes.get(trackKey);
+
+        console.log(`  Active notes before: [${Array.from(trackActiveNotes.keys()).join(',')}]`);
+
+        // Create lookup of previous notes by name for tie checking
+        const prevNotesByName = new Map();
+        for (const note of prevNotes) {
+          prevNotesByName.set(note.noteName, note);
+        }
+
+        // Create lookup of current notes by name
+        const currentNotesByName = new Map();
+        for (const note of currentNotes) {
+          currentNotesByName.set(note.noteName, note);
+        }
+
+        // Handle notes that should stop (were active but shouldn't continue)
+        for (const [noteName, noteId] of trackActiveNotes) {
+          const prevNote = prevNotesByName.get(noteName);
+          const currentNote = currentNotesByName.get(noteName);
+
+          // Note should continue if: prev was tied AND current has same note
+          const shouldContinue = prevNote?.tie && currentNote;
+
+          console.log(`  Check ${noteName}: prevTie=${prevNote?.tie}, hasCurrent=${!!currentNote}, shouldContinue=${shouldContinue}`);
+
+          if (!shouldContinue) {
+            // Stop this note
+            console.log(`  STOP: ${noteName}`);
             if (this._stopNote) {
-              this._stopNote(activeNoteId);
+              this._stopNote(noteId);
             }
-            this.activeNotes.delete(trackKey);
+            trackActiveNotes.delete(noteName);
           }
         }
 
-        // Start new note if this step has one
-        if (step.type === 'note') {
+        // Start new notes (notes in current step that aren't continuing from tie)
+        for (const note of currentNotes) {
+          // Skip if this note is continuing from a tie
+          if (trackActiveNotes.has(note.noteName)) {
+            console.log(`  CONTINUE (skip start): ${note.noteName}`);
+            continue;
+          }
+
           // Calculate actual note duration from gate percentage
-          // Gate 100 = 90% of step (leaving room for attack of next note)
-          // Gate 50 = 45% of step, etc.
-          const gateFactor = (step.gate / 100) * 0.9;
+          const gateFactor = (note.gate / 100) * 0.9;
           const noteDuration = stepDuration * gateFactor;
 
           // Convert velocity from 0-100 to 0-127 for MIDI compatibility
-          const midiVelocity = Math.round((step.velocity / 100) * 127);
+          const midiVelocity = Math.round((note.velocity / 100) * 127);
+
+          console.log(`  START: ${note.noteName}, tie=${note.tie}, slideTo=${note.slideTo ? note.slideTo.noteName : 'null'}`);
 
           // triggerNote returns noteId
-          const noteId = triggerNote(step.frequency, step.noteName, noteDuration, track.oscillator, midiVelocity, step.tie);
+          // Pass slideTo info for portamento
+          const noteId = triggerNote(
+            note.frequency,
+            note.noteName,
+            noteDuration,
+            track.oscillator,
+            midiVelocity,
+            note.tie,
+            note.slideTo // New parameter for slide target
+          );
 
           // Track this note for tie handling
-          if (step.tie && noteId) {
-            this.activeNotes.set(trackKey, noteId);
+          if (note.tie && noteId) {
+            trackActiveNotes.set(note.noteName, noteId);
+            console.log(`  TRACKED for tie: ${note.noteName}`);
           }
         }
+
+        console.log(`  Active notes after: [${Array.from(trackActiveNotes.keys()).join(',')}]`);
       }
     };
 
@@ -272,6 +406,32 @@ class Sequencer {
   }
 
   /**
+   * Get notes array from a step (handles note, chord, and rest types)
+   * @param {object} step - Step object
+   * @returns {array} Array of note objects
+   */
+  _getStepNotes(step) {
+    if (step.type === 'rest') {
+      return [];
+    }
+    if (step.type === 'chord') {
+      return step.notes;
+    }
+    if (step.type === 'note') {
+      // Single note - wrap in array
+      return [{
+        noteName: step.noteName,
+        frequency: step.frequency,
+        velocity: step.velocity,
+        gate: step.gate,
+        tie: step.tie,
+        slideTo: step.slideTo
+      }];
+    }
+    return [];
+  }
+
+  /**
    * Stop playback
    */
   stop() {
@@ -282,10 +442,12 @@ class Sequencer {
     this.isPlaying = false;
     this.currentStep = 0;
 
-    // Stop any active tied notes
+    // Stop any active tied notes (now nested Maps: trackKey -> Map<noteName, noteId>)
     if (this._stopNote) {
-      for (const noteId of this.activeNotes.values()) {
-        this._stopNote(noteId);
+      for (const trackNotes of this.activeNotes.values()) {
+        for (const noteId of trackNotes.values()) {
+          this._stopNote(noteId);
+        }
       }
     }
     this.activeNotes.clear();

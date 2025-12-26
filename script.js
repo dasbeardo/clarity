@@ -1140,6 +1140,9 @@ function syncUIFromText() {
     if (audioEngine) {
       audioEngine.initializeMaster();
     }
+
+    // Update track visualizer indicators
+    createTrackIndicators();
   } catch (error) {
     console.error('Error in syncUIFromText:', error);
   }
@@ -1377,7 +1380,7 @@ class PolyphonyManager {
     this.activeNotes = new Map();
   }
 
-  startNote(frequency, noteId, velocity = 127, isSynthetic = false, midiNote = null, keyChar = null, oscillatorFilter = null) {
+  startNote(frequency, noteId, velocity = 127, isSynthetic = false, midiNote = null, keyChar = null, oscillatorFilter = null, slideTo = null, duration = null) {
     if (this.activeNotes.has(noteId)) {
       this.stopNote(noteId);
     }
@@ -1390,7 +1393,11 @@ class PolyphonyManager {
 
     // Create note using audio engine (with optional oscillator filter for sequencer)
     // Pass velocity for dynamic expression (0-127 scale)
-    const note = audioEngine ? audioEngine.createNote(noteName, frequency, keyScope, oscillatorFilter, velocity) : null;
+    // Pass slideTo for portamento (slide to target frequency)
+    if (slideTo || duration) {
+      console.log(`[POLY] startNote: ${noteName}, slideTo=${slideTo ? JSON.stringify(slideTo) : 'null'}, duration=${duration}`);
+    }
+    const note = audioEngine ? audioEngine.createNote(noteName, frequency, keyScope, oscillatorFilter, velocity, slideTo, duration) : null;
 
     if (note) {
       this.activeNotes.set(noteId, note);
@@ -1910,9 +1917,142 @@ function midiNoteToNoteName(midiNote) {
   return `${noteName}${octave}`;
 }
 
+// ===== Track Visualizer =====
+
+// Color map for named colors
+const TRACK_COLOR_MAP = {
+  red: '#ff4444',
+  orange: '#ff8844',
+  yellow: '#ffdd44',
+  green: '#44ff66',
+  cyan: '#44ffff',
+  blue: '#4488ff',
+  purple: '#aa44ff',
+  magenta: '#ff44ff',
+  pink: '#ff88aa',
+  white: '#ffffff'
+};
+
+// Default colors for tracks without specified color (cycle through)
+const DEFAULT_TRACK_COLORS = ['#ff4444', '#44ff66', '#4488ff', '#ffdd44', '#ff44ff', '#44ffff', '#ff8844', '#aa44ff'];
+
+// Resolve color name or hex to actual hex value
+function resolveTrackColor(color, index = 0) {
+  if (!color) {
+    return DEFAULT_TRACK_COLORS[index % DEFAULT_TRACK_COLORS.length];
+  }
+  if (color.startsWith('#')) {
+    return color;
+  }
+  // Check if it's a 6-char hex without #
+  if (/^[0-9a-fA-F]{6}$/.test(color)) {
+    return '#' + color;
+  }
+  return TRACK_COLOR_MAP[color.toLowerCase()] || DEFAULT_TRACK_COLORS[index % DEFAULT_TRACK_COLORS.length];
+}
+
+// Create track indicators based on current oscillators
+function createTrackIndicators() {
+  const container = document.getElementById('track-visualizer');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  // Get oscillators from the instance store
+  const oscillators = instanceStore.getComponentsByType('oscillator', 'global');
+  const oscillatorConfigs = Object.entries(oscillators || {});
+
+  oscillatorConfigs.forEach(([name, config], index) => {
+    const color = config.attributes?.color || null;
+    const resolvedColor = resolveTrackColor(color, index);
+
+    const indicator = document.createElement('div');
+    indicator.className = 'track-indicator';
+    indicator.dataset.oscillator = name;
+
+    const light = document.createElement('div');
+    light.className = 'light';
+    light.style.backgroundColor = resolvedColor;
+    indicator.appendChild(light);
+
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = name;
+    indicator.appendChild(label);
+
+    container.appendChild(indicator);
+  });
+}
+
+// Update track visualizer based on active notes
+function updateTrackVisualizer() {
+  const noteDisplay = document.getElementById('note-display');
+  const trackVisualizer = document.getElementById('track-visualizer');
+  const keyboardPanel = document.querySelector('.keyboard-panel');
+  const keyboardCompact = document.getElementById('keyboard-compact');
+
+  if (!noteDisplay || !trackVisualizer) return;
+
+  // Check if sequencer is playing
+  const isSequencerPlaying = sequencer && sequencer.isPlaying;
+
+  if (!isSequencerPlaying) {
+    // Show note display and full keyboard for keyboard/MIDI input
+    noteDisplay.style.display = 'flex';
+    trackVisualizer.style.display = 'none';
+    if (keyboardPanel) keyboardPanel.style.display = '';
+    if (keyboardCompact) keyboardCompact.style.display = 'none';
+    return;
+  }
+
+  // Show track visualizer and compact keyboard for sequencer
+  noteDisplay.style.display = 'none';
+  trackVisualizer.style.display = 'flex';
+  if (keyboardPanel) keyboardPanel.style.display = 'none';
+  if (keyboardCompact) keyboardCompact.style.display = 'flex';
+
+  // Reset all indicators
+  document.querySelectorAll('.track-indicator').forEach(el => {
+    el.classList.remove('active');
+    const light = el.querySelector('.light');
+    if (light) {
+      light.style.opacity = '0.15';
+      light.style.boxShadow = '0 0 0 rgba(255, 255, 255, 0)';
+    }
+  });
+
+  // Light up active tracks
+  for (const note of polyphonyManager.activeNotes.values()) {
+    // Get oscillator name from the note (stored as oscillatorFilter in audio engine)
+    const oscName = note.oscillatorFilter;
+    if (!oscName) continue;
+
+    const indicator = document.querySelector(`.track-indicator[data-oscillator="${oscName}"]`);
+    if (indicator) {
+      indicator.classList.add('active');
+      const light = indicator.querySelector('.light');
+      if (light) {
+        // Velocity-based brightness: 0.5 to 1.0
+        const velocity = note.velocity || 1;
+        const opacity = 0.5 + (velocity * 0.5);
+        light.style.opacity = opacity;
+
+        // Add subtle glow effect based on velocity
+        const color = light.style.backgroundColor;
+        const glowSize = Math.round(3 + velocity * 6);
+        light.style.boxShadow = `0 0 ${glowSize}px ${color}`;
+      }
+    }
+  }
+}
+
 // Update the note display to show currently playing notes
 function updateNoteDisplay() {
+  // Also update track visualizer
+  updateTrackVisualizer();
+
   const noteDisplayText = document.getElementById('note-display-text');
+  if (!noteDisplayText) return;
 
   if (polyphonyManager.activeNotes.size === 0) {
     noteDisplayText.textContent = '--';
@@ -3412,7 +3552,8 @@ document.addEventListener("click", (e) => {
 
 document.addEventListener("keydown", (e) => {
   const target = e.target;
-  if (target.id !== "virtual-keyboard") return;
+  // Accept input from both full keyboard and compact button
+  if (target.id !== "virtual-keyboard" && target.id !== "keyboard-compact") return;
 
   const key = e.key.toLowerCase();
 
@@ -3458,7 +3599,8 @@ document.addEventListener("keydown", (e) => {
 
 document.addEventListener("keyup", (e) => {
   const target = e.target;
-  if (target.id !== "virtual-keyboard") return;
+  // Accept input from both full keyboard and compact button
+  if (target.id !== "virtual-keyboard" && target.id !== "keyboard-compact") return;
 
   const key = e.key.toLowerCase();
   const midiNote = keyToNote[key];
@@ -4508,7 +4650,20 @@ function showSequencerControls() {
     track.steps.forEach((step, i) => {
       const stepEl = document.createElement('div');
       stepEl.className = 'step' + (step.type === 'rest' ? ' rest' : '');
-      stepEl.textContent = step.type === 'rest' ? '-' : step.noteName.replace(/\d/, '');
+
+      // Handle different step types: rest, note, chord
+      if (step.type === 'rest') {
+        stepEl.textContent = '-';
+      } else if (step.type === 'chord') {
+        // For chords, show note count or first few notes
+        const noteNames = step.notes.map(n => n.noteName.replace(/\d/, '')).join('');
+        stepEl.textContent = noteNames.length > 3 ? noteNames.slice(0, 3) : noteNames;
+        stepEl.classList.add('chord');
+      } else {
+        // Single note
+        stepEl.textContent = step.noteName ? step.noteName.replace(/\d/, '') : '?';
+      }
+
       stepContainer.appendChild(stepEl);
     });
 
@@ -4563,11 +4718,14 @@ function playSequencer() {
   }
 
   sequencer.play(
-    // triggerNote callback - now receives velocity and tie
-    (frequency, noteName, duration, oscillatorName, velocity = 127, tie = false) => {
+    // triggerNote callback - now receives velocity, tie, and slideTo
+    (frequency, noteName, duration, oscillatorName, velocity = 127, tie = false, slideTo = null) => {
+      // Debug logging for slides and ties
+      console.log(`[TRIGGER] ${noteName}: freq=${frequency.toFixed(2)}, dur=${duration.toFixed(0)}ms, osc=${oscillatorName}, vel=${velocity}, tie=${tie}, slideTo=${slideTo ? slideTo.noteName : 'null'}`);
+
       // Trigger note through polyphony manager with oscillator filter
       const noteId = `seq_${Date.now()}_${Math.random()}`;
-      polyphonyManager.startNote(frequency, noteId, velocity, true, null, null, oscillatorName);
+      polyphonyManager.startNote(frequency, noteId, velocity, true, null, null, oscillatorName, slideTo, duration);
 
       // Stop note after duration (unless tied - sequencer handles tie cleanup)
       if (!tie) {
@@ -4613,12 +4771,15 @@ function updateSequencerText() {
   for (const track of state.tracks) {
     const sequenceStr = track.steps.map(s => {
       if (s.type === 'rest') return '-';
-      // Reconstruct note with modifiers
-      let note = s.noteName;
-      if (s.velocity !== 100) note += `@${s.velocity}`;
-      if (s.gate !== 100) note += `:${s.gate}`;
-      if (s.tie) note += '~';
-      return note;
+
+      // Handle chord type
+      if (s.type === 'chord') {
+        const noteStrs = s.notes.map(n => formatNoteWithModifiers(n)).join(',');
+        return `[${noteStrs}]`;
+      }
+
+      // Single note with modifiers
+      return formatNoteWithModifiers(s);
     }).join(' ');
     if (track.oscillator) {
       text += `\noscillator ${track.oscillator}\n  sequence ${sequenceStr}\n`;
@@ -4633,4 +4794,23 @@ function updateSequencerText() {
   if (editorArea) {
     editorArea.textContent = sequencerEditorContent;
   }
+}
+
+/**
+ * Format a note object with its modifiers back to string
+ */
+function formatNoteWithModifiers(note) {
+  let str = note.noteName;
+
+  // Add slide target if present
+  if (note.slideTo) {
+    str += `>${note.slideTo.noteName}`;
+  }
+
+  // Add modifiers
+  if (note.velocity !== 100) str += `@${note.velocity}`;
+  if (note.gate !== 100) str += `:${note.gate}`;
+  if (note.tie) str += '~';
+
+  return str;
 }

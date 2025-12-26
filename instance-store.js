@@ -35,7 +35,8 @@ class InstanceStore {
         lfos: {},
         envelopes: {},
         filters: {},
-        compressors: {}
+        compressors: {},
+        distortions: {}
       },
       triggers: {}
     };
@@ -61,7 +62,8 @@ class InstanceStore {
       lfo: 'lfos',
       envelope: 'envelopes',
       filter: 'filters',
-      compressor: 'compressors'
+      compressor: 'compressors',
+      distortion: 'distortions'
     };
     return plurals[componentType] || componentType + 's';
   }
@@ -133,7 +135,8 @@ class InstanceStore {
             lfos: {},
             envelopes: {},
             filters: {},
-            compressors: {}
+            compressors: {},
+            distortions: {}
           },
           attributes: {},
           variableOverrides: {}
@@ -205,7 +208,8 @@ class InstanceStore {
       lfos: { ...this.components.global.lfos },
       envelopes: { ...this.components.global.envelopes },
       filters: { ...this.components.global.filters },
-      compressors: { ...this.components.global.compressors }
+      compressors: { ...this.components.global.compressors },
+      distortions: { ...this.components.global.distortions }
     };
 
     const trigger = this.components.triggers[scopeKey];
@@ -287,7 +291,8 @@ class InstanceStore {
           lfos: {},
           envelopes: {},
           filters: {},
-          compressors: {}
+          compressors: {},
+          distortions: {}
         },
         attributes: {},
         variableOverrides: {}
@@ -384,7 +389,8 @@ class InstanceStore {
           lfos: {},
           envelopes: {},
           filters: {},
-          compressors: {}
+          compressors: {},
+          distortions: {}
         },
         attributes: {},
         variableOverrides: {}

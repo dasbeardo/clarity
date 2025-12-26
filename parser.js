@@ -288,12 +288,58 @@ class Parser {
       this._parseVariable(content, indent);
     } else if (this._isTrigger(content)) {
       this._parseTrigger(content, indent);
+    } else if (this._isTriggerAttribute(content)) {
+      // Check if this is a trigger attribute BEFORE checking for component
+      // (e.g., "distortion crunch" under "master" should be an attribute, not a new component)
+      this._parseAttribute(content, indent);
+    } else if (this._isComponentAttribute(content)) {
+      // Check if this is a component attribute BEFORE checking for new component
+      // (e.g., "distortion crunch" under "oscillator" should be an attribute, not a new component)
+      this._parseAttribute(content, indent);
     } else if (this._isComponent(content)) {
       this._parseComponent(content, indent);
     } else {
       // Must be an attribute
       this._parseAttribute(content, indent);
     }
+  }
+
+  /**
+   * Check if line is a trigger attribute (when inside a trigger context)
+   * This prevents "distortion crunch" from being parsed as a component when under "master"
+   */
+  _isTriggerAttribute(content) {
+    // Must be inside a trigger
+    if (!this.context.currentTrigger) return false;
+
+    const { type } = this.context.currentTrigger;
+    const triggerSchema = this.schemas.SchemaUtils.getTriggerSchema(type);
+    if (!triggerSchema || !triggerSchema.canHaveAttributes || !triggerSchema.attributes) return false;
+
+    // Get the first word of content
+    const firstWord = content.split(' ')[0];
+
+    // Check if it matches a trigger attribute name
+    return triggerSchema.attributes.hasOwnProperty(firstWord);
+  }
+
+  /**
+   * Check if line is a component attribute (when inside a component context)
+   * This prevents "distortion crunch" from being parsed as a new component when under "oscillator"
+   */
+  _isComponentAttribute(content) {
+    // Must be inside a component
+    if (!this.context.currentComponent) return false;
+
+    const { type } = this.context.currentComponent;
+    const componentSchema = this.schemas.SchemaUtils.getComponentSchema(type);
+    if (!componentSchema || !componentSchema.attributes) return false;
+
+    // Get the first word of content
+    const firstWord = content.split(' ')[0];
+
+    // Check if it matches a component attribute name
+    return componentSchema.attributes.hasOwnProperty(firstWord);
   }
 
   /**
@@ -409,6 +455,7 @@ class Parser {
    * Format: master | note [name] | key [char]
    */
   _parseTrigger(content, indent) {
+    console.log(`_parseTrigger: "${content}" at indent ${indent}`);
     const parts = content.split(' ');
     const triggerType = parts[0];
     const triggerName = parts.slice(1).join(' ').trim();
@@ -435,6 +482,8 @@ class Parser {
     } else if (triggerType === 'key') {
       scopeKey = `key_${triggerName}`;
     }
+
+    console.log(`  Trigger parsed: type=${triggerType}, scopeKey=${scopeKey}`);
 
     // Push scope
     this.context.pushScope(triggerType, scopeKey, indent);
@@ -564,7 +613,9 @@ class Parser {
    * Parse trigger attribute (for triggers like master that can have attributes)
    */
   _parseTriggerAttribute(attributeName, valueStr) {
+    console.log(`_parseTriggerAttribute: "${attributeName}" = "${valueStr}"`);
     const { type, key } = this.context.currentTrigger;
+    console.log(`  Current trigger: type=${type}, key=${key}`);
 
     // Get trigger schema
     const triggerSchema = this.schemas.SchemaUtils.getTriggerSchema(type);
@@ -581,9 +632,11 @@ class Parser {
 
     // Resolve value
     const value = this._resolveAttributeValue(valueStr, type, attributeName, attrSchema);
+    console.log(`  Resolved value:`, value);
 
     // Set trigger attribute
     this.store.setTriggerAttribute(key, attributeName, value);
+    console.log(`  Trigger attribute set: ${key}.${attributeName}`);
   }
 
   /**
@@ -672,14 +725,63 @@ class Parser {
     // Resolve references in global components
     this._resolveComponentReferences(this.store.components.global);
 
-    // Resolve references in trigger components
+    // Resolve references in trigger components AND trigger attributes
     for (const [triggerKey, trigger] of Object.entries(this.store.components.triggers)) {
       if (trigger.components) {
         this._resolveComponentReferences(trigger.components);
       }
+      // Also resolve trigger's own attributes (e.g., master.distortion)
+      if (trigger.attributes) {
+        this._resolveTriggerAttributeReferences(triggerKey, trigger);
+      }
     }
 
     console.log('Pass 2 complete');
+  }
+
+  /**
+   * Resolve attribute references for a trigger (e.g., master's distortion ref)
+   */
+  _resolveTriggerAttributeReferences(triggerKey, trigger) {
+    const triggerType = trigger.type;
+    const triggerSchema = this.schemas.SchemaUtils.getTriggerSchema(triggerType);
+    if (!triggerSchema || !triggerSchema.attributes) return;
+
+    for (const [attrName, attrValue] of Object.entries(trigger.attributes)) {
+      const attrSchema = triggerSchema.attributes[attrName];
+      if (!attrSchema) continue;
+
+      // Check if this attribute should be a component reference but is still a string
+      if (typeof attrValue === 'string' &&
+          (attrSchema.type === this.schemas.AttributeType.COMPONENT_REF || attrSchema.acceptsModulation)) {
+
+        // Try to resolve as component reference
+        const componentInfo = this.store.getNameInfo(attrValue);
+        console.log(`Resolving trigger attr "${attrName}" = "${attrValue}" in ${triggerType}:`, componentInfo);
+
+        if (componentInfo && componentInfo.type !== 'variable') {
+          // Validate type
+          let isValid = false;
+          if (attrSchema.acceptsComponents && attrSchema.acceptsComponents.includes(componentInfo.type)) {
+            isValid = true;
+          } else if (attrSchema.acceptsModulation && attrSchema.acceptsModulation.includes(componentInfo.type)) {
+            isValid = true;
+          }
+
+          if (isValid) {
+            // Convert to component reference
+            trigger.attributes[attrName] = {
+              type: 'component_ref',
+              value: attrValue,
+              componentType: componentInfo.type
+            };
+            console.log(`✓ Resolved trigger attr: ${triggerType}.${attrName} -> ${attrValue}`);
+          } else {
+            console.warn(`Component type "${componentInfo.type}" not accepted for trigger attribute "${attrName}"`);
+          }
+        }
+      }
+    }
   }
 
   /**

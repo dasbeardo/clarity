@@ -141,6 +141,19 @@ const COMPONENT_SCHEMAS = {
         description: 'Release time',
         ui: { control: 'slider', label: 'release time' },
         canReference: [AttributeType.VARIABLE_REF]
+      },
+      color: {
+        type: AttributeType.ENUM,
+        values: ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'magenta', 'pink', 'white'],
+        default: null,
+        description: 'Track visualization color',
+        ui: { control: 'select' },
+        allowCustom: true
+      },
+      distortion: {
+        type: AttributeType.COMPONENT_REF,
+        acceptsComponents: ['distortion'],
+        description: 'Distortion effect for this oscillator'
       }
     }
   },
@@ -254,6 +267,33 @@ const COMPONENT_SCHEMAS = {
         ui: { control: 'slider' },
         canReference: [AttributeType.VARIABLE_REF, AttributeType.COMPONENT_REF],
         acceptsModulation: ['lfo', 'envelope']
+      }
+    }
+  },
+
+  distortion: {
+    role: ComponentRole.PROCESSOR,
+    description: 'Waveshaper distortion/saturation',
+    attributes: {
+      drive: {
+        type: AttributeType.PERCENTAGE,
+        min: 0,
+        max: 100,
+        step: 1,
+        default: 50,
+        description: 'Distortion intensity',
+        ui: { control: 'slider' },
+        canReference: [AttributeType.VARIABLE_REF]
+      },
+      mix: {
+        type: AttributeType.PERCENTAGE,
+        min: 0,
+        max: 100,
+        step: 1,
+        default: 100,
+        description: 'Wet/dry mix',
+        ui: { control: 'slider' },
+        canReference: [AttributeType.VARIABLE_REF]
       }
     }
   },
@@ -388,6 +428,11 @@ const TRIGGER_SCHEMAS = {
         type: AttributeType.COMPONENT_REF,
         acceptsComponents: ['compressor'],
         description: 'Master compressor'
+      },
+      distortion: {
+        type: AttributeType.COMPONENT_REF,
+        acceptsComponents: ['distortion'],
+        description: 'Master distortion'
       },
       envelope: {
         type: AttributeType.COMPONENT_REF,

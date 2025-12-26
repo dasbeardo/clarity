@@ -20,6 +20,7 @@ class AudioEngine {
     this.masterGain = null;
     this.masterFilter = null;
     this.masterCompressor = null;
+    this.masterDistortion = null;
 
     // Active notes (for cleanup)
     // Map<noteKey, NoteInstance>
@@ -30,6 +31,18 @@ class AudioEngine {
    * Initialize master chain
    */
   initializeMaster() {
+    console.log('=== initializeMaster called ===');
+
+    // Debug: Log all master trigger attributes
+    const masterTrigger = this.store.components.triggers['master'];
+    console.log('Master trigger from store:', masterTrigger);
+    console.log('Master trigger attributes:', masterTrigger?.attributes);
+
+    // Reset effect nodes (clean up old connections)
+    this.masterDistortion = null;
+    this.masterCompressor = null;
+    this.masterFilter = null;
+
     // Create master gain
     this.masterGain = this.audioContext.createGain();
     this.masterGain.connect(this.audioContext.destination);
@@ -64,7 +77,29 @@ class AudioEngine {
       }
     }
 
-    // Return the input node (last in chain)
+    // Create and connect distortion if referenced
+    // Signal chain: oscillators → distortion → compressor → filter → gain → destination
+    const distortionRef = this.store.getTriggerAttribute('master', 'distortion');
+    console.log('initializeMaster - distortionRef:', distortionRef);
+    if (distortionRef && distortionRef.type === 'component_ref') {
+      console.log('Creating distortion node for:', distortionRef.value);
+      this.masterDistortion = this._createDistortionNode(distortionRef.value);
+      console.log('masterDistortion created:', this.masterDistortion);
+      // Connect to next node in chain
+      if (this.masterCompressor) {
+        this.masterDistortion.output.connect(this.masterCompressor);
+      } else if (this.masterFilter) {
+        this.masterDistortion.output.connect(this.masterFilter);
+      } else {
+        this.masterDistortion.output.connect(this.masterGain);
+      }
+      console.log('Distortion connected to chain');
+    } else {
+      console.log('No distortion ref found or invalid type');
+    }
+
+    // Return the input node (first in chain that exists)
+    if (this.masterDistortion) return this.masterDistortion.input;
     if (this.masterCompressor) return this.masterCompressor;
     if (this.masterFilter) return this.masterFilter;
     return this.masterGain;
@@ -77,9 +112,11 @@ class AudioEngine {
    * @param {string|null} keyScope - Active key scope if any (e.g., 'key_a')
    * @param {string|null} oscillatorFilter - Only use this oscillator (null = all)
    * @param {number} velocity - Note velocity 0-127 (default 127)
+   * @param {object|null} slideTo - Slide target { frequency, noteName } (for portamento)
+   * @param {number|null} duration - Note duration in ms (for slide timing)
    * @returns {NoteInstance} Note instance
    */
-  createNote(noteName, frequency, keyScope = null, oscillatorFilter = null, velocity = 127) {
+  createNote(noteName, frequency, keyScope = null, oscillatorFilter = null, velocity = 127, slideTo = null, duration = null) {
     // Determine scope key for note
     const noteScope = `note_${noteName}`;
 
@@ -97,15 +134,18 @@ class AudioEngine {
       this.store,
       this.schemas,
       oscillatorFilter,
-      velocity
+      velocity,
+      slideTo,
+      duration
     );
 
     // Track active note
     const noteKey = `${noteName}_${Date.now()}`;
     this.activeNotes.set(noteKey, note);
 
-    // Get master input
-    const masterInput = this.masterCompressor || this.masterFilter || this.masterGain;
+    // Get master input (first node in effects chain)
+    // Signal flow: oscillators → distortion → compressor → filter → gain → destination
+    const masterInput = this.masterDistortion?.input || this.masterCompressor || this.masterFilter || this.masterGain;
 
     // Start the note
     note.start(masterInput);
@@ -198,6 +238,85 @@ class AudioEngine {
   }
 
   /**
+   * Create a distortion node from component instance
+   * Returns { input, output } for wet/dry routing
+   */
+  _createDistortionNode(componentName) {
+    const component = this.store.getComponent(componentName);
+    if (!component) return null;
+
+    // Get parameters
+    const drive = this._resolveAttributeValue(component.attributes.drive, null) ?? 50;
+    const mix = this._resolveAttributeValue(component.attributes.mix, null) ?? 100;
+
+    // Create nodes
+    const inputGain = this.audioContext.createGain();
+    const outputGain = this.audioContext.createGain();
+    const wetGain = this.audioContext.createGain();
+    const dryGain = this.audioContext.createGain();
+    const waveshaper = this.audioContext.createWaveShaper();
+
+    // Set wet/dry mix
+    const wetAmount = mix / 100;
+    const dryAmount = 1 - wetAmount;
+    wetGain.gain.value = wetAmount;
+    dryGain.gain.value = dryAmount;
+
+    // Generate distortion curve based on drive
+    waveshaper.curve = this._makeDistortionCurve(drive);
+    waveshaper.oversample = '2x'; // Reduce aliasing
+
+    // Gain compensation: reduce output as drive increases to maintain consistent volume
+    // Higher drive = more harmonics = perceived louder, so we reduce gain
+    const compensation = 1 - (drive / 100) * 0.5; // At drive 100, output is 50%
+    outputGain.gain.value = compensation;
+
+    // Connect: input → dry → output
+    //          input → waveshaper → wet → output
+    inputGain.connect(dryGain);
+    dryGain.connect(outputGain);
+
+    inputGain.connect(waveshaper);
+    waveshaper.connect(wetGain);
+    wetGain.connect(outputGain);
+
+    console.log(`Distortion created: drive=${drive}, mix=${mix}%, compensation=${compensation.toFixed(2)}`);
+
+    return { input: inputGain, output: outputGain };
+  }
+
+  /**
+   * Generate a soft-clipping distortion curve
+   * @param {number} drive - 0-100 distortion amount
+   */
+  _makeDistortionCurve(drive) {
+    const samples = 44100;
+    const curve = new Float32Array(samples);
+
+    // Convert drive (0-100) to useful range
+    // drive 0 = clean, drive 100 = heavy saturation
+    const amount = drive / 100;
+
+    for (let i = 0; i < samples; i++) {
+      // Map index to -1 to 1
+      const x = (i * 2) / samples - 1;
+
+      if (amount === 0) {
+        // No distortion - linear
+        curve[i] = x;
+      } else {
+        // Attempt tanh-style soft clipping
+        // Mix between linear and heavily saturated based on drive
+        const k = amount * 50; // Saturation intensity
+        const saturated = Math.tanh(k * x) / Math.tanh(k); // Normalize to -1 to 1
+        curve[i] = x * (1 - amount) + saturated * amount;
+      }
+    }
+
+    return curve;
+  }
+
+  /**
    * Resolve an attribute value (handles variables and references)
    */
   _resolveAttributeValue(attrValue, scopeKey) {
@@ -258,7 +377,7 @@ class AudioEngine {
  * Represents a single note with all its oscillators and modulation
  */
 class NoteInstance {
-  constructor(audioContext, noteName, frequency, noteScope, keyScope, components, store, schemas, oscillatorFilter = null, velocity = 127) {
+  constructor(audioContext, noteName, frequency, noteScope, keyScope, components, store, schemas, oscillatorFilter = null, velocity = 127, slideTo = null, duration = null) {
     this.audioContext = audioContext;
     this.noteName = noteName;
     this.frequency = frequency;
@@ -269,6 +388,8 @@ class NoteInstance {
     this.schemas = schemas;
     this.oscillatorFilter = oscillatorFilter; // Only create this oscillator (null = all)
     this.velocity = velocity / 127; // Normalize 0-127 to 0-1 for gain scaling
+    this.slideTo = slideTo; // { frequency, noteName } for portamento
+    this.slideDuration = duration; // Duration in ms for slide timing
 
     // Audio nodes created for this note
     this.oscillators = [];
@@ -329,10 +450,40 @@ class NoteInstance {
     osc.frequency.value = baseFreq;
     osc.detune.value = detune;
 
+    // Apply portamento (slide) if specified
+    console.log(`[SLIDE DEBUG] slideTo=${JSON.stringify(this.slideTo)}, slideDuration=${this.slideDuration}`);
+    if (this.slideTo && this.slideDuration) {
+      const targetFreq = this.slideTo.frequency * Math.pow(2, octave);
+      const slideTime = this.slideDuration / 1000; // Convert ms to seconds
+      const now = this.audioContext.currentTime;
+
+      console.log(`[SLIDE] Applying portamento: ${baseFreq.toFixed(2)}Hz -> ${targetFreq.toFixed(2)}Hz over ${slideTime.toFixed(3)}s`);
+
+      // Use exponentialRampToValueAtTime for more natural pitch glide
+      osc.frequency.setValueAtTime(baseFreq, now);
+      osc.frequency.exponentialRampToValueAtTime(targetFreq, now + slideTime * 0.9);
+    } else if (this.slideTo) {
+      console.warn(`[SLIDE] slideTo present but slideDuration missing: ${this.slideDuration}`);
+    }
+
     // Create envelope gain for this oscillator
     const envGain = this.audioContext.createGain();
     osc.connect(envGain);
-    envGain.connect(this.noteGain);
+
+    // Check for per-oscillator distortion
+    const distortionRef = oscComponent.attributes.distortion;
+    if (distortionRef && distortionRef.type === 'component_ref') {
+      const distortion = this._createDistortionNode(distortionRef.value);
+      if (distortion) {
+        envGain.connect(distortion.input);
+        distortion.output.connect(this.noteGain);
+        console.log(`Oscillator ${oscComponent.name} using distortion: ${distortionRef.value}`);
+      } else {
+        envGain.connect(this.noteGain);
+      }
+    } else {
+      envGain.connect(this.noteGain);
+    }
 
     // Get volume and apply velocity scaling
     const volume = this._resolveValue(oscComponent.attributes.volume) || 50;
@@ -512,6 +663,73 @@ class NoteInstance {
     }
 
     return value;
+  }
+
+  /**
+   * Create a distortion node for per-oscillator distortion
+   */
+  _createDistortionNode(componentName) {
+    const component = this.store.getComponent(componentName);
+    if (!component) return null;
+
+    // Get parameters
+    const drive = this._resolveValue(component.attributes.drive) ?? 50;
+    const mix = this._resolveValue(component.attributes.mix) ?? 100;
+
+    // Create nodes
+    const inputGain = this.audioContext.createGain();
+    const outputGain = this.audioContext.createGain();
+    const wetGain = this.audioContext.createGain();
+    const dryGain = this.audioContext.createGain();
+    const waveshaper = this.audioContext.createWaveShaper();
+
+    // Set wet/dry mix
+    const wetAmount = mix / 100;
+    const dryAmount = 1 - wetAmount;
+    wetGain.gain.value = wetAmount;
+    dryGain.gain.value = dryAmount;
+
+    // Generate distortion curve based on drive
+    waveshaper.curve = this._makeDistortionCurve(drive);
+    waveshaper.oversample = '2x';
+
+    // Gain compensation
+    const compensation = 1 - (drive / 100) * 0.5;
+    outputGain.gain.value = compensation;
+
+    // Connect: input → dry → output
+    //          input → waveshaper → wet → output
+    inputGain.connect(dryGain);
+    dryGain.connect(outputGain);
+
+    inputGain.connect(waveshaper);
+    waveshaper.connect(wetGain);
+    wetGain.connect(outputGain);
+
+    return { input: inputGain, output: outputGain };
+  }
+
+  /**
+   * Generate distortion curve for per-oscillator distortion
+   */
+  _makeDistortionCurve(drive) {
+    const samples = 44100;
+    const curve = new Float32Array(samples);
+    const amount = drive / 100;
+
+    for (let i = 0; i < samples; i++) {
+      const x = (i * 2) / samples - 1;
+
+      if (amount === 0) {
+        curve[i] = x;
+      } else {
+        const k = amount * 50;
+        const saturated = Math.tanh(k * x) / Math.tanh(k);
+        curve[i] = x * (1 - amount) + saturated * amount;
+      }
+    }
+
+    return curve;
   }
 }
 

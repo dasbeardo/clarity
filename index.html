@@ -48,9 +48,20 @@
 
     <!-- Right Pane: Controls -->
     <div class="right-pane">
-      <!-- Note Display -->
+      <!-- Note Display (shown during keyboard/MIDI input) -->
       <div id="note-display" class="note-display">
         <span id="note-display-text">--</span>
+      </div>
+
+      <!-- Track Visualizer (shown during sequencer playback) -->
+      <div id="track-visualizer" class="track-visualizer" style="display: none;">
+        <!-- Dynamically populated with track indicators -->
+      </div>
+
+      <!-- Compact keyboard button (shown during sequencer playback) -->
+      <div id="keyboard-compact" class="keyboard-compact" tabindex="0" style="display: none;">
+        <span class="keyboard-icon">&#9000;</span>
+        <span class="keyboard-compact-label">QWERTY</span>
       </div>
 
       <!-- Virtual Keyboard Panel -->

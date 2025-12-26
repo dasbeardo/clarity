@@ -22,6 +22,8 @@ oscillator <name>
   sustain <0-100>
   release <ms>
   pitch <lfo-name>
+  distortion <name>
+  color <color>
 ```
 
 **Parameters:**
@@ -33,6 +35,12 @@ oscillator <name>
 - `sustain` - Volume level held while note is on: `0` to `100`
 - `release` - Time to fade to silence after note off in ms: `1` to `2000`
 - `pitch` - Name of an LFO to modulate pitch (vibrato)
+- `distortion` - Name of a distortion effect to apply to this oscillator
+- `color` - Track visualization color during sequencer playback
+
+**Color values:**
+- Named colors: `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple`, `magenta`, `pink`, `white`
+- Hex codes: `#ff0000`, `#00ff88`, etc.
 
 **Wave characteristics:**
 - `sine` - Pure, clean, round tone. Good for bass, sub-bass, pads
@@ -57,6 +65,45 @@ lfo <name>
 - `rate` - Speed in Hz: `0.1` to `20` (5-7 typical for vibrato)
 - `depth` - Intensity in cents: `0` to `50` (10-20 typical for vibrato)
 
+### Distortion
+
+Add grit and saturation to individual oscillators or the master output.
+
+```
+distortion <name>
+  drive <0-100>
+  mix <0-100>
+```
+
+**Parameters:**
+- `drive` - Distortion intensity: `0` = clean, `100` = heavy saturation
+- `mix` - Wet/dry blend: `0` = dry only, `100` = full distortion
+
+**Usage:** Define a distortion effect, then reference it in oscillators or master:
+
+```
+distortion crunch
+  drive 60
+  mix 80
+
+distortion light
+  drive 25
+  mix 50
+
+oscillator lead
+  wave sawtooth
+  distortion crunch
+
+oscillator bass
+  wave square
+  distortion light
+
+master
+  volume 75
+```
+
+Each oscillator can have its own distortion with different settings. You can also apply distortion to the master output instead of (or in addition to) individual oscillators.
+
 ### Master
 
 Global settings for the final output.
@@ -64,6 +111,7 @@ Global settings for the final output.
 ```
 master
   volume <0-100>
+  distortion <name>
 ```
 
 ---
@@ -117,21 +165,73 @@ Modifiers are optional suffixes that add expression:
 
 **Combined example:** `c4@80:50~` = C4 at 80% velocity, 50% duration, tied to next step
 
-### Modifier Usage
+**Modifier order:** Always `note@velocity:gate~` (e.g., `c4@80:50~`)
 
-**Velocity (`@N`)** - Creates dynamics and accents
-- `c4@100` - Full volume (accent)
-- `c4@60` - Medium volume
-- `c4@30` - Quiet (ghost note)
+### Chords
 
-**Gate (`:N`)** - Controls note length within the step
-- `c4:100` - Full length (legato)
-- `c4:50` - Half length (normal)
-- `c4:25` - Short stab (staccato)
+Play multiple notes simultaneously using bracket notation:
 
-**Tie (`~`)** - Sustains note across multiple steps
-- `c4~ c4~ c4~ c4` - Hold C4 for 4 steps total (only first triggers, rest sustain)
-- The tied notes must be the same pitch
+```
+[c4,e4,g4]
+```
+
+**Examples:**
+- `[c4,e4,g4]` - C major chord
+- `[a3,c4,e4]` - A minor chord
+- `[c4,e4,g4,b4]` - C major 7th
+
+**With modifiers:** Apply modifiers to individual notes within the chord:
+- `[c4@80,e4@70,g4@90]` - Different velocities per note
+- `[c4:50,e4:50,g4:50]` - Staccato chord
+- `[c4~,e4~,g4]` - Tied notes within chord (for voice leading)
+
+### Slides / Portamento
+
+Glide smoothly between pitches using `>`:
+
+```
+c4>e4
+```
+
+**Examples:**
+- `c4>e4` - Glide from C4 to E4
+- `c3>c4` - Octave slide up
+- `c5>c3` - Two-octave slide down
+- `g4@80>c5` - Slide with velocity
+
+**Behavior:**
+- Slides automatically sustain (no need to add `~`)
+- The pitch glides over ~90% of the step, then holds at target
+- Slides continue until the next note or rest
+
+**Use slides for:**
+- Guitar-style bends and slides
+- Bass glissandos
+- Synth portamento leads
+- Smooth pitch transitions
+
+### Voice Leading
+
+Hold some notes while others change by using ties on individual chord notes:
+
+```
+[c4~,e4~,g4] [c4~,e4~,a4] [c4,e4,b4]
+```
+
+**How it works:**
+- `[c4~,e4~,g4]` - C4 and E4 sustain into next step; G4 plays normally
+- `[c4~,e4~,a4]` - C4 and E4 continue (no re-attack); A4 is new; G4 stops
+- `[c4,e4,b4]` - C4 and E4 still held from step 0; B4 is new
+
+**Rules:**
+- A tied note continues if the next step contains the same note
+- Untied notes release at their gate time
+- When a step has no ties, all held notes release after that step
+
+**Use voice leading for:**
+- Piano-style chord progressions
+- Smooth pad transitions
+- Holding bass notes while melody changes
 
 ### Rest
 
@@ -205,7 +305,59 @@ oscillator snare
   sequence - - - - c4@100 - - - - - - - c4@100 - - -
 ```
 
-### Example 3: Full Track with Expression
+### Example 3: Chord Progression with Voice Leading
+
+**.instrument:**
+```
+oscillator pad
+  wave triangle
+  octave 0
+  volume 55
+  attack 150
+  decay 200
+  sustain 80
+  release 400
+  color blue
+
+master
+  volume 75
+```
+
+**.sequence:**
+```
+bpm 90
+
+oscillator pad
+  sequence [c4~,e4~,g4~] [c4~,e4~,g4~] [c4~,f4~,a4~] [c4~,f4~,a4~] [b3~,d4~,g4~] [b3~,d4~,g4~] [c4,e4,g4] -
+```
+
+### Example 4: Sliding Bass Line
+
+**.instrument:**
+```
+oscillator bass
+  wave sawtooth
+  octave -1
+  volume 75
+  attack 5
+  decay 150
+  sustain 70
+  release 100
+  color orange
+
+master
+  volume 80
+```
+
+**.sequence:**
+```
+bpm 95
+
+oscillator bass
+  sequence c2>e2 e2 e2>g2 g2 g2>c3 c3>c2 c2 - a1>c2 c2 c2>e2 e2 e2>a2 a2>e2 e2 -
+```
+
+### Example 5: Full Track with Slides and Chords
 
 **.instrument:**
 ```
@@ -217,6 +369,7 @@ oscillator kick
   decay 120
   sustain 0
   release 40
+  color red
 
 oscillator bass
   wave sawtooth
@@ -226,6 +379,7 @@ oscillator bass
   decay 200
   sustain 75
   release 100
+  color orange
 
 oscillator lead
   wave square
@@ -236,41 +390,48 @@ oscillator lead
   sustain 55
   release 350
   pitch vib
+  color cyan
 
-oscillator arp
+oscillator pad
   wave triangle
-  octave 1
-  volume 35
-  attack 2
-  decay 60
-  sustain 30
-  release 100
+  octave 0
+  volume 40
+  attack 200
+  decay 150
+  sustain 85
+  release 500
+  color purple
 
 lfo vib
   wave sine
   rate 5.5
   depth 15
 
+distortion grit
+  drive 35
+  mix 40
+
 master
   volume 75
+  distortion grit
 ```
 
 **.sequence:**
 ```
-bpm 128
+bpm 118
 swing 55
 
 oscillator kick
   sequence c2@100 - - - c2@80 - - - c2@100 - c2@50 - c2@100 - c2@60 -
 
 oscillator bass
-  sequence e2~ e2~ e2 - - - g2:50 - a2~ a2 - - e2:25 - - -
+  sequence e2>g2 g2 - - a2>e2 e2 - - e2>g2 g2 - - c2>e2 e2 - -
 
 oscillator lead
-  sequence - - - - - - - - e4@80~ e4~ e4 - g4@90:50 - a4@100~ a4
+  sequence - - - - - - - - e4>g4 g4@80 - - a4@90~ a4 g4>e4 e4
 
-oscillator arp
-  sequence e5@70 b4@50 e5@70 b4@50 g5@80 e5@60 a5@90 g5@70 e5@70 b4@50 e5@70 b4@50 b5@100 a5@80 g5@70 e5@60
+oscillator pad
+  sequence [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [a3~,c4~,e4~] [a3~,c4~,e4~] [a3~,c4~,e4~] [a3,c4,e4] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [e3~,g3~,b3~] [c3~,e3~,g3~] [c3~,e3~,g3~] [c3~,e3~,g3~] [c3,e3,g3]
 ```
 
 ---
@@ -297,6 +458,7 @@ oscillator arp
 - Longer decay (`150-300ms`)
 - High sustain (`60-85`)
 - Medium release (`80-150ms`)
+- Use slides for groovy bass lines
 
 ### Leads
 - Use `square` or `sawtooth` at `octave 0`
@@ -305,6 +467,7 @@ oscillator arp
 - Medium sustain (`40-65`)
 - Long release (`250-500ms`)
 - Add pitch modulation with LFO for vibrato
+- Use slides for expressive melodies
 
 ### Pads
 - Use `triangle` or `sine`
@@ -312,6 +475,7 @@ oscillator arp
 - Medium decay (`100-200ms`)
 - High sustain (`70-90`)
 - Long release (`400-800ms`)
+- Use voice leading for smooth chord changes
 
 ### Arpeggios
 - Use `triangle` or `square` at `octave 1`
@@ -337,6 +501,17 @@ oscillator arp
 ### Tie Patterns
 - Long notes: `c4~ c4~ c4~ c4 - - - -` (holds for 4 steps)
 - Phrase endings: `e4 g4 a4@90~ a4~ a4 - - -`
+
+### Slide Patterns
+- Rising line: `c4>e4 e4>g4 g4>c5 c5 - - - -`
+- Falling line: `c5>g4 g4>e4 e4>c4 c4 - - - -`
+- Octave jumps: `c3>c4 - c4>c5 - c5>c3 - - -`
+- Subtle bends: `c4>d4 d4>c4` (whole tone wobble)
+
+### Chord Progressions with Voice Leading
+- I-IV-V: `[c4~,e4~,g4] [c4~,f4~,a4] [b3,d4,g4]`
+- i-iv-V: `[a3~,c4~,e4] [a3~,d4~,f4] [g#3,b3,e4]`
+- Hold bass: `[c3~,e4,g4] [c3~,f4,a4] [c3,e4,g4]` (C stays)
 
 ### Swing
 - `50` = Perfectly straight (robotic)

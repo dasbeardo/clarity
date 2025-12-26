@@ -165,6 +165,113 @@ body {
   font-family: monospace;
 }
 
+/* Track Visualizer - shown during sequencer playback */
+.track-visualizer {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: #1d1f21;
+  border-bottom: 1px solid #373b41;
+  padding: 12px 15px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 50px;
+  margin: -20px -20px 0 -20px;
+}
+
+.track-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #282a2e;
+  border: 1px solid #373b41;
+  border-radius: 6px;
+  padding: 6px 12px;
+  min-width: 80px;
+  transition: border-color 0.08s ease-out, background 0.08s ease-out;
+}
+
+.track-indicator .light {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  opacity: 0.3;
+  flex-shrink: 0;
+  transition: opacity 0.08s ease-out, box-shadow 0.08s ease-out;
+  box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+}
+
+.track-indicator.active {
+  background: #2a2c30;
+  border-color: #4a4e54;
+}
+
+.track-indicator.active .light {
+  opacity: 1;
+}
+
+.track-indicator .label {
+  font-size: 11px;
+  color: #636567;
+  text-transform: lowercase;
+  letter-spacing: 0.3px;
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.08s ease-out;
+}
+
+.track-indicator.active .label {
+  color: #c5c8c6;
+}
+
+/* Compact keyboard button (shown during sequencer playback) */
+.keyboard-compact {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #282a2e;
+  border: 1px solid #373b41;
+  border-radius: 6px;
+  padding: 8px 14px;
+  margin: 0 auto 15px auto;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  outline: none;
+}
+
+.keyboard-compact:hover {
+  border-color: #5fd3bc;
+  background: #2a2c30;
+}
+
+.keyboard-compact:focus {
+  border-color: #ff8c66;
+  background: #2a2c30;
+  box-shadow: 0 0 0 2px rgba(255, 140, 102, 0.2);
+}
+
+.keyboard-compact .keyboard-icon {
+  font-size: 14px;
+  color: #5fd3bc;
+}
+
+.keyboard-compact .keyboard-compact-label {
+  font-size: 11px;
+  color: #969896;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.keyboard-compact:focus .keyboard-compact-label {
+  color: #ff8c66;
+}
+
 .controls-section {
   flex-shrink: 0;
 }
