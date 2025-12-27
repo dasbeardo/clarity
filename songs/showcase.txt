@@ -89,8 +89,14 @@ distortion edge
   drive 45
   mix 60
 
+delay echo
+  time 280
+  feedback 35
+  mix 25
+
 master
   volume 75
+  delay echo
 
 
 # ═══════════════════════════════════════════════════════════════

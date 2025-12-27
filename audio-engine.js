@@ -21,6 +21,7 @@ class AudioEngine {
     this.masterFilter = null;
     this.masterCompressor = null;
     this.masterDistortion = null;
+    this.masterDelay = null;
 
     // Active notes (for cleanup)
     // Map<noteKey, NoteInstance>
@@ -40,6 +41,7 @@ class AudioEngine {
 
     // Reset effect nodes (clean up old connections)
     this.masterDistortion = null;
+    this.masterDelay = null;
     this.masterCompressor = null;
     this.masterFilter = null;
 
@@ -77,16 +79,34 @@ class AudioEngine {
       }
     }
 
+    // Create and connect delay if referenced
+    // Signal chain: oscillators → distortion → delay → compressor → filter → gain → destination
+    const delayRef = this.store.getTriggerAttribute('master', 'delay');
+    if (delayRef && delayRef.type === 'component_ref') {
+      console.log('Creating delay node for:', delayRef.value);
+      this.masterDelay = this._createDelayNode(delayRef.value);
+      // Connect to next node in chain
+      if (this.masterCompressor) {
+        this.masterDelay.output.connect(this.masterCompressor);
+      } else if (this.masterFilter) {
+        this.masterDelay.output.connect(this.masterFilter);
+      } else {
+        this.masterDelay.output.connect(this.masterGain);
+      }
+      console.log('Delay connected to chain');
+    }
+
     // Create and connect distortion if referenced
-    // Signal chain: oscillators → distortion → compressor → filter → gain → destination
     const distortionRef = this.store.getTriggerAttribute('master', 'distortion');
     console.log('initializeMaster - distortionRef:', distortionRef);
     if (distortionRef && distortionRef.type === 'component_ref') {
       console.log('Creating distortion node for:', distortionRef.value);
       this.masterDistortion = this._createDistortionNode(distortionRef.value);
       console.log('masterDistortion created:', this.masterDistortion);
-      // Connect to next node in chain
-      if (this.masterCompressor) {
+      // Connect to next node in chain (delay comes after distortion)
+      if (this.masterDelay) {
+        this.masterDistortion.output.connect(this.masterDelay.input);
+      } else if (this.masterCompressor) {
         this.masterDistortion.output.connect(this.masterCompressor);
       } else if (this.masterFilter) {
         this.masterDistortion.output.connect(this.masterFilter);
@@ -100,6 +120,7 @@ class AudioEngine {
 
     // Return the input node (first in chain that exists)
     if (this.masterDistortion) return this.masterDistortion.input;
+    if (this.masterDelay) return this.masterDelay.input;
     if (this.masterCompressor) return this.masterCompressor;
     if (this.masterFilter) return this.masterFilter;
     return this.masterGain;
@@ -144,8 +165,8 @@ class AudioEngine {
     this.activeNotes.set(noteKey, note);
 
     // Get master input (first node in effects chain)
-    // Signal flow: oscillators → distortion → compressor → filter → gain → destination
-    const masterInput = this.masterDistortion?.input || this.masterCompressor || this.masterFilter || this.masterGain;
+    // Signal flow: oscillators → distortion → delay → compressor → filter → gain → destination
+    const masterInput = this.masterDistortion?.input || this.masterDelay?.input || this.masterCompressor || this.masterFilter || this.masterGain;
 
     // Start the note
     note.start(masterInput);
@@ -314,6 +335,56 @@ class AudioEngine {
     }
 
     return curve;
+  }
+
+  /**
+   * Create a delay node from component instance
+   * Returns { input, output } for wet/dry routing
+   */
+  _createDelayNode(componentName) {
+    const component = this.store.getComponent(componentName);
+    if (!component) return null;
+
+    // Get parameters
+    const time = this._resolveAttributeValue(component.attributes.time, null) ?? 300;
+    const feedback = this._resolveAttributeValue(component.attributes.feedback, null) ?? 40;
+    const mix = this._resolveAttributeValue(component.attributes.mix, null) ?? 30;
+
+    // Create nodes
+    const inputGain = this.audioContext.createGain();
+    const outputGain = this.audioContext.createGain();
+    const wetGain = this.audioContext.createGain();
+    const dryGain = this.audioContext.createGain();
+    const delayNode = this.audioContext.createDelay(5.0); // Max 5 seconds
+    const feedbackGain = this.audioContext.createGain();
+
+    // Set delay time (convert ms to seconds)
+    delayNode.delayTime.value = time / 1000;
+
+    // Set feedback (0-95% to prevent runaway feedback)
+    feedbackGain.gain.value = Math.min(feedback / 100, 0.95);
+
+    // Set wet/dry mix
+    const wetAmount = mix / 100;
+    const dryAmount = 1 - wetAmount;
+    wetGain.gain.value = wetAmount;
+    dryGain.gain.value = dryAmount;
+
+    // Connect dry path: input → dry → output
+    inputGain.connect(dryGain);
+    dryGain.connect(outputGain);
+
+    // Connect wet path with feedback: input → delay → wet → output
+    //                                        ↑____feedback____↓
+    inputGain.connect(delayNode);
+    delayNode.connect(feedbackGain);
+    feedbackGain.connect(delayNode); // Feedback loop
+    delayNode.connect(wetGain);
+    wetGain.connect(outputGain);
+
+    console.log(`Delay created: time=${time}ms, feedback=${feedback}%, mix=${mix}%`);
+
+    return { input: inputGain, output: outputGain };
   }
 
   /**

@@ -298,6 +298,44 @@ const COMPONENT_SCHEMAS = {
     }
   },
 
+  delay: {
+    role: ComponentRole.PROCESSOR,
+    description: 'Echo/delay effect with feedback',
+    attributes: {
+      time: {
+        type: AttributeType.TIME_MS,
+        min: 1,
+        max: 2000,
+        step: 1,
+        default: 300,
+        unit: 'ms',
+        description: 'Delay time',
+        ui: { control: 'slider' },
+        canReference: [AttributeType.VARIABLE_REF]
+      },
+      feedback: {
+        type: AttributeType.PERCENTAGE,
+        min: 0,
+        max: 95,
+        step: 1,
+        default: 40,
+        description: 'Feedback amount',
+        ui: { control: 'slider' },
+        canReference: [AttributeType.VARIABLE_REF]
+      },
+      mix: {
+        type: AttributeType.PERCENTAGE,
+        min: 0,
+        max: 100,
+        step: 1,
+        default: 30,
+        description: 'Wet/dry mix',
+        ui: { control: 'slider' },
+        canReference: [AttributeType.VARIABLE_REF]
+      }
+    }
+  },
+
   compressor: {
     role: ComponentRole.PROCESSOR,
     description: 'Dynamic range compressor',
@@ -433,6 +471,11 @@ const TRIGGER_SCHEMAS = {
         type: AttributeType.COMPONENT_REF,
         acceptsComponents: ['distortion'],
         description: 'Master distortion'
+      },
+      delay: {
+        type: AttributeType.COMPONENT_REF,
+        acceptsComponents: ['delay'],
+        description: 'Master delay effect'
       },
       envelope: {
         type: AttributeType.COMPONENT_REF,

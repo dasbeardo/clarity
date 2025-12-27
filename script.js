@@ -2486,9 +2486,17 @@ function initializeBlocks() {
   initialLines.push('  mix 60');
   initialLines.push('');
 
+  // Delay effect
+  initialLines.push('delay echo');
+  initialLines.push('  time 280');
+  initialLines.push('  feedback 35');
+  initialLines.push('  mix 25');
+  initialLines.push('');
+
   // Master
   initialLines.push('master');
   initialLines.push('  volume 75');
+  initialLines.push('  delay echo');
 
   parametersTextbox.contentEditable = 'true';
   parametersTextbox.innerHTML = '';

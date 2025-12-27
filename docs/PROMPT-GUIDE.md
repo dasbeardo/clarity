@@ -104,6 +104,35 @@ master
 
 Each oscillator can have its own distortion with different settings. You can also apply distortion to the master output instead of (or in addition to) individual oscillators.
 
+### Delay
+
+Add echo and rhythmic repeats to the master output.
+
+```
+delay <name>
+  time <1-2000>
+  feedback <0-95>
+  mix <0-100>
+```
+
+**Parameters:**
+- `time` - Delay time in milliseconds: `1` to `2000`
+- `feedback` - Echo repetition amount: `0` = single echo, `95` = long trails
+- `mix` - Wet/dry blend: `0` = dry only, `100` = full wet
+
+**Usage:** Define a delay effect, then reference it in master:
+
+```
+delay echo
+  time 300
+  feedback 40
+  mix 30
+
+master
+  volume 75
+  delay echo
+```
+
 ### Master
 
 Global settings for the final output.
@@ -112,6 +141,7 @@ Global settings for the final output.
 master
   volume <0-100>
   distortion <name>
+  delay <name>
 ```
 
 ---
