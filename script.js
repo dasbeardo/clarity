@@ -4871,6 +4871,9 @@ function toggleSequencerPlayback() {
  * Start sequencer playback
  */
 function playSequencer() {
+  // Ensure track indicators are created (in case oscillators changed or user is on sequencer tab)
+  createTrackIndicators();
+
   // Update header transport button
   const headerPlayBtn = document.getElementById('seq-play-header');
   if (headerPlayBtn) {
