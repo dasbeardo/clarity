@@ -4,6 +4,28 @@ All changes since forking from the original Clarity branch.
 
 ---
 
+## Effects
+
+### Delay Effect (New)
+- Added delay component with time, feedback, and wet/dry mix
+- Time: 1-2000ms delay time
+- Feedback: 0-95% for echo repetition
+- Mix: 0-100% wet/dry blend
+- Reference in master: `delay echo`
+
+```
+delay echo
+  time 300
+  feedback 40
+  mix 30
+
+master
+  volume 75
+  delay echo
+```
+
+---
+
 ## Audio Engine Fixes
 
 ### Release Time 1000x Too Fast
@@ -105,6 +127,17 @@ All changes since forking from the original Clarity branch.
 - **Problem:** Notes would keep playing when switching apps
 - **Fix:** Added window blur listener to stop all keyboard notes
 
+### In-App Help Modal
+- Added `?` button in header nav bar
+- Two-tab modal: Instrument guide and Sequencer guide
+- Covers syntax, wave types, envelope parameters, modifiers, chords, slides
+- Includes tips for different instrument types
+
+### Track Indicators Not Appearing
+- **Problem:** Oscillator track indicators weren't showing during playback
+- **Cause:** `createTrackIndicators()` only called from instrument tab parser
+- **Fix:** Now also called when sequencer starts playback
+
 ---
 
 ## Documentation
@@ -144,3 +177,8 @@ All changes since forking from the original Clarity branch.
 8. `ab6fc67` - Move sequencer play/stop controls to header nav bar
 9. `e470d75` - Fix track visualizer overflow and add showcase song
 10. `a3cabe8` - Set "Digital Dreams" as default instrument and sequence
+11. `bc7b27d` - Add sequencer quickstart guide and changelog
+12. `af5490d` - Move documentation files to docs folder
+13. `11e9880` - Add in-app help modal with instrument and sequencer guides
+14. `ba20a98` - Add delay effect with time, feedback, and wet/dry mix
+15. `ba687f4` - Fix track indicators not appearing during sequencer playback
