@@ -40,6 +40,7 @@
         <div class="editor-tabs">
           <button class="tab active" data-tab="synth">.instrument</button>
           <button class="tab" data-tab="sequencer">.sequence</button>
+          <button class="tab" data-tab="song">.song</button>
         </div>
         <div class="header-spacer"></div>
         <div class="sequencer-transport-header" id="sequencer-transport-header">
@@ -51,6 +52,7 @@
       </div>
       <div id="parameters" class="tab-content"></div>
       <div id="sequencer-editor" class="tab-content hidden"></div>
+      <div id="song-editor" class="tab-content hidden"></div>
     </div>
 
     <!-- Right Pane: Controls -->
@@ -216,6 +218,7 @@
         <div class="help-tabs">
           <button class="help-tab active" data-help-tab="instrument">Instrument</button>
           <button class="help-tab" data-help-tab="sequencer">Sequencer</button>
+          <button class="help-tab" data-help-tab="song">Song</button>
         </div>
         <button class="help-close-btn">&times;</button>
       </div>
@@ -345,6 +348,92 @@ swing 67   # Heavy triplet feel</pre>
           <h3>Track Colors</h3>
           <p>Add <code>color red</code> (or <code>#ff3300</code>) to oscillators. Indicators light up during playback.</p>
         </div>
+
+        <!-- Song Help -->
+        <div id="help-song" class="help-content">
+          <h2>Song Composer</h2>
+          <p>Write songs at a higher level using patterns, chord symbols, and structure. Great for AI/LLM music generation.</p>
+
+          <h3>Basic Structure</h3>
+          <pre>song My Song
+key E minor
+bpm 120
+swing 55
+
+# Map roles to oscillators
+voice kick = kick
+voice bass = bass-synth
+voice pad = pad</pre>
+
+          <h3>Rhythm Patterns</h3>
+          <pre>rhythm kick4
+  x - - - x - - - x - - - x - - -
+
+rhythm hats
+  x . x . x . x . x . x . x . x .</pre>
+          <div class="help-table">
+            <table>
+              <tr><td><code>x</code></td><td>Hit (full velocity)</td></tr>
+              <tr><td><code>.</code></td><td>Ghost note (soft)</td></tr>
+              <tr><td><code>-</code></td><td>Rest</td></tr>
+            </table>
+          </div>
+
+          <h3>Chord Progressions</h3>
+          <pre>chords verse
+  Em - - - | Am - - - | C - - - | B7 - - -</pre>
+          <p>Standard chord symbols. <code>|</code> are optional visual bar markers.</p>
+          <div class="help-table">
+            <table>
+              <tr><td><code>C</code> <code>Am</code> <code>F#m</code></td><td>Major/minor</td></tr>
+              <tr><td><code>Cmaj7</code> <code>Am7</code> <code>G7</code></td><td>Seventh chords</td></tr>
+              <tr><td><code>Csus4</code> <code>Dsus2</code></td><td>Suspended</td></tr>
+              <tr><td><code>Cdim</code> <code>Caug</code></td><td>Diminished/augmented</td></tr>
+            </table>
+          </div>
+
+          <h3>Bass &amp; Melody (Scale Degrees)</h3>
+          <pre>bass verse
+  1 - - 1 | - - 5 - | 1 - 3 - | 5 - 1 -
+
+melody hook
+  5 - 6 - | 7 - 1^ - | 5 - - - | - - - -</pre>
+          <div class="help-table">
+            <table>
+              <tr><td><code>1</code></td><td>Root of chord (bass) or key (melody)</td></tr>
+              <tr><td><code>3</code> <code>5</code> <code>7</code></td><td>Third, fifth, seventh</td></tr>
+              <tr><td><code>1^</code></td><td>Octave up</td></tr>
+              <tr><td><code>5_</code></td><td>Octave down</td></tr>
+            </table>
+          </div>
+
+          <h3>Sections</h3>
+          <pre>section verse
+  kick: kick4
+  snare: backbeat
+  bass: verse
+  pad: verse
+
+section chorus
+  kick: kick4
+  snare: backbeat
+  bass: chorus
+  pad: chorus
+  lead: hook</pre>
+
+          <h3>Song Structure</h3>
+          <pre>structure
+  verse verse chorus verse chorus chorus</pre>
+          <p>Just list sections in order. They compile to one long sequence.</p>
+
+          <h3>Why Use .song?</h3>
+          <ul>
+            <li><strong>Patterns reuse</strong> - Define once, use many times</li>
+            <li><strong>Chord symbols</strong> - No manual note entry</li>
+            <li><strong>Scale degrees</strong> - Can't hit wrong notes</li>
+            <li><strong>AI-friendly</strong> - LLMs generate this easily</li>
+          </ul>
+        </div>
       </div>
     </div>
   </div>
@@ -358,6 +447,8 @@ swing 67   # Heavy triplet feel</pre>
   <script src="audio-engine.js"></script>
   <script src="ui-generator.js"></script>
   <script src="sequencer.js"></script>
+  <script src="song-parser.js"></script>
+  <script src="song-compiler.js"></script>
   <!-- Main application script -->
   <script src="script.js"></script>
 </body>

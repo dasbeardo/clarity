@@ -4417,7 +4417,9 @@ function initializeHelpModal() {
   helpBtn.addEventListener('click', () => {
     helpModal.classList.remove('hidden');
     // Switch to relevant tab based on current main tab
-    const activeTab = currentTab === 'sequencer' ? 'sequencer' : 'instrument';
+    let activeTab = 'instrument';
+    if (currentTab === 'sequencer') activeTab = 'sequencer';
+    else if (currentTab === 'song') activeTab = 'song';
     switchHelpTab(activeTab);
   });
 
@@ -4610,6 +4612,56 @@ document.addEventListener("keydown", (event) => {
 // ============================================================================
 
 let currentTab = 'synth';
+
+// Song editor state
+let songParser = null;
+let songCompiler = null;
+let songEditorContent = `# Example Song - Edit this to create music!
+# This compiles down to sequence data automatically.
+
+song Chill Beat
+key E minor
+bpm 100
+swing 55
+
+# Map voices to your oscillators from .instrument
+voice kick = kick
+voice snare = snare
+voice hat = hat
+voice bass = bass
+voice pad = pad
+
+# Rhythm patterns: x = hit, . = soft hit, - = rest
+rhythm kick4
+  x - - - x - - - x - - - x - - -
+
+rhythm backbeat
+  - - - - x - - - - - - - x - - -
+
+rhythm hats
+  x . x . x . x . x . x . x . x .
+
+# Chord progression (auto-voiced)
+chords verse
+  Em - - - | Am - - - | C - - - | B7 - - -
+
+# Bass pattern (1=root, 3=third, 5=fifth of current chord)
+bass verse
+  1 - - 1 | - - 5 - | 1 - 3 - | 5 - 1 -
+
+# Sections combine patterns
+section verse
+  kick: kick4
+  snare: backbeat
+  hat: hats
+  bass: verse
+  pad: verse
+
+# Song structure - list sections in order
+structure
+  verse verse verse verse
+`;
+
 let sequencerEditorContent = `bpm 108
 swing 55
 
@@ -4663,6 +4715,9 @@ function initializeSequencerUI() {
     sequencer.parse(sequencerEditorContent);
   }
 
+  // Initialize song editor
+  initializeSongEditor();
+
   // Set up step change callback
   if (sequencer) {
     sequencer.onStepChange = updateStepIndicator;
@@ -4672,7 +4727,86 @@ function initializeSequencerUI() {
 }
 
 /**
- * Switch between synth and sequencer tabs
+ * Initialize song editor (parser, compiler, UI)
+ */
+function initializeSongEditor() {
+  // Initialize parser and compiler
+  songParser = new SongParser();
+  songCompiler = new SongCompiler();
+
+  // Initialize song editor content
+  const songEditor = document.getElementById('song-editor');
+  if (songEditor) {
+    songEditor.innerHTML = '';
+    const editorArea = document.createElement('div');
+    editorArea.className = 'song-text';
+    editorArea.contentEditable = true;
+    editorArea.textContent = songEditorContent;
+    editorArea.addEventListener('input', onSongTextChange);
+    songEditor.appendChild(editorArea);
+  }
+
+  console.log('Song editor initialized');
+}
+
+/**
+ * Handle song text changes - recompile to sequence
+ */
+function onSongTextChange(event) {
+  const text = event.target.innerText;
+  songEditorContent = text;
+
+  // Compile song to sequence
+  compileSongToSequence();
+}
+
+/**
+ * Compile song DSL to sequencer format
+ */
+function compileSongToSequence() {
+  if (!songParser || !songCompiler) {
+    console.warn('[Song] Parser or compiler not initialized');
+    return;
+  }
+
+  try {
+    // Parse song
+    const ast = songParser.parse(songEditorContent);
+    console.log('[Song] Parsed AST:', ast);
+
+    // Compile to sequence text
+    const sequenceText = songCompiler.compile(ast);
+    console.log('[Song] Compiled sequence:\n', sequenceText);
+
+    // Update sequencer with compiled output
+    sequencerEditorContent = sequenceText;
+
+    // Update sequencer editor display (if visible or for debugging)
+    const editorArea = document.querySelector('#sequencer-editor .sequencer-text');
+    if (editorArea) {
+      editorArea.textContent = sequenceText;
+    }
+
+    // Update preview in song controls
+    const preview = document.getElementById('song-preview');
+    if (preview) {
+      preview.textContent = sequenceText;
+    }
+
+    // Parse into sequencer
+    sequencer.parse(sequenceText);
+
+    // Update UI
+    updateSequencerUI();
+
+    console.log('[Song] Compilation successful');
+  } catch (err) {
+    console.error('[Song] Compilation error:', err);
+  }
+}
+
+/**
+ * Switch between synth, sequencer, and song tabs
  */
 function switchTab(tabName) {
   currentTab = tabName;
@@ -4686,18 +4820,103 @@ function switchTab(tabName) {
   // Update content visibility
   const parametersEl = document.getElementById('parameters');
   const sequencerEl = document.getElementById('sequencer-editor');
+  const songEl = document.getElementById('song-editor');
+
+  // Hide all
+  parametersEl.classList.add('hidden');
+  sequencerEl.classList.add('hidden');
+  songEl.classList.add('hidden');
 
   if (tabName === 'synth') {
     parametersEl.classList.remove('hidden');
-    sequencerEl.classList.add('hidden');
     // Show synth UI on right pane
     syncUIFromText();
-  } else {
-    parametersEl.classList.add('hidden');
+  } else if (tabName === 'sequencer') {
     sequencerEl.classList.remove('hidden');
     // Show sequencer UI on right pane
     showSequencerControls();
+  } else if (tabName === 'song') {
+    songEl.classList.remove('hidden');
+    // Show song controls on right pane
+    showSongControls();
+    // Compile song to update sequencer
+    compileSongToSequence();
   }
+}
+
+/**
+ * Show song controls in the right pane
+ */
+function showSongControls() {
+  const container = document.getElementById('oscillators-container');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  // Create song controls section
+  const section = document.createElement('div');
+  section.className = 'controls-section song-controls';
+
+  // Header
+  const header = document.createElement('h2');
+  header.textContent = 'song';
+  section.appendChild(header);
+
+  // Info text
+  const info = document.createElement('p');
+  info.className = 'song-info';
+  info.innerHTML = `Edit the <strong>.song</strong> tab to compose using patterns and chord symbols.
+    The song automatically compiles to sequence data.<br><br>
+    <strong>Tip:</strong> This format is designed for AI/LLM music generation.`;
+  section.appendChild(info);
+
+  // Compile button
+  const compileBtn = document.createElement('button');
+  compileBtn.className = 'transport-btn';
+  compileBtn.textContent = 'Recompile';
+  compileBtn.addEventListener('click', () => {
+    compileSongToSequence();
+  });
+  section.appendChild(compileBtn);
+
+  // Show compiled output preview
+  const previewHeader = document.createElement('h3');
+  previewHeader.textContent = 'compiled output';
+  previewHeader.style.marginTop = '20px';
+  section.appendChild(previewHeader);
+
+  const preview = document.createElement('pre');
+  preview.className = 'song-preview';
+  preview.id = 'song-preview';
+  preview.style.fontSize = '10px';
+  preview.style.maxHeight = '200px';
+  preview.style.overflow = 'auto';
+  preview.style.background = 'rgba(0,0,0,0.2)';
+  preview.style.padding = '10px';
+  preview.style.borderRadius = '4px';
+  preview.textContent = sequencerEditorContent;
+  section.appendChild(preview);
+
+  container.appendChild(section);
+
+  // Transport controls (same as sequencer)
+  const transport = document.createElement('div');
+  transport.className = 'sequencer-transport';
+  transport.style.marginTop = '20px';
+
+  const playBtn = document.createElement('button');
+  playBtn.className = 'transport-btn play-btn';
+  playBtn.textContent = '▶ Play';
+  playBtn.addEventListener('click', toggleSequencerPlayback);
+
+  const stopBtn = document.createElement('button');
+  stopBtn.className = 'transport-btn stop-btn';
+  stopBtn.textContent = '■ Stop';
+  stopBtn.addEventListener('click', stopSequencer);
+
+  transport.appendChild(playBtn);
+  transport.appendChild(stopBtn);
+  section.appendChild(transport);
 }
 
 /**

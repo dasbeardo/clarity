@@ -138,6 +138,39 @@ body {
   min-height: 100%;
 }
 
+#song-editor {
+  flex: 1;
+  padding: 20px;
+  font-family: 'Hammersmith One', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  background: #282a2e;
+  color: #c5c8c6;
+  outline: none;
+  overflow: auto;
+}
+
+.song-text {
+  outline: none;
+  white-space: pre-wrap;
+  min-height: 100%;
+}
+
+.song-info {
+  color: #969896;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 15px;
+}
+
+.song-preview {
+  font-family: monospace;
+  font-size: 11px;
+  color: #969896;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 #parameters {
   flex: 1;
   padding: 20px;
