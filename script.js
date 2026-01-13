@@ -4730,23 +4730,36 @@ function initializeSequencerUI() {
  * Initialize song editor (parser, compiler, UI)
  */
 function initializeSongEditor() {
-  // Initialize parser and compiler
-  songParser = new SongParser();
-  songCompiler = new SongCompiler();
+  try {
+    // Initialize parser and compiler (check if classes exist)
+    if (typeof SongParser !== 'undefined') {
+      songParser = new SongParser();
+    } else {
+      console.warn('SongParser not defined');
+    }
 
-  // Initialize song editor content
-  const songEditor = document.getElementById('song-editor');
-  if (songEditor) {
-    songEditor.innerHTML = '';
-    const editorArea = document.createElement('div');
-    editorArea.className = 'song-text';
-    editorArea.contentEditable = true;
-    editorArea.textContent = songEditorContent;
-    editorArea.addEventListener('input', onSongTextChange);
-    songEditor.appendChild(editorArea);
+    if (typeof SongCompiler !== 'undefined') {
+      songCompiler = new SongCompiler();
+    } else {
+      console.warn('SongCompiler not defined');
+    }
+
+    // Initialize song editor content
+    const songEditor = document.getElementById('song-editor');
+    if (songEditor) {
+      songEditor.innerHTML = '';
+      const editorArea = document.createElement('div');
+      editorArea.className = 'song-text';
+      editorArea.contentEditable = true;
+      editorArea.textContent = songEditorContent;
+      editorArea.addEventListener('input', onSongTextChange);
+      songEditor.appendChild(editorArea);
+    }
+
+    console.log('Song editor initialized');
+  } catch (err) {
+    console.error('Error initializing song editor:', err);
   }
-
-  console.log('Song editor initialized');
 }
 
 /**
@@ -4822,21 +4835,21 @@ function switchTab(tabName) {
   const sequencerEl = document.getElementById('sequencer-editor');
   const songEl = document.getElementById('song-editor');
 
-  // Hide all
-  parametersEl.classList.add('hidden');
-  sequencerEl.classList.add('hidden');
-  songEl.classList.add('hidden');
+  // Hide all (with null checks)
+  if (parametersEl) parametersEl.classList.add('hidden');
+  if (sequencerEl) sequencerEl.classList.add('hidden');
+  if (songEl) songEl.classList.add('hidden');
 
   if (tabName === 'synth') {
-    parametersEl.classList.remove('hidden');
+    if (parametersEl) parametersEl.classList.remove('hidden');
     // Show synth UI on right pane
     syncUIFromText();
   } else if (tabName === 'sequencer') {
-    sequencerEl.classList.remove('hidden');
+    if (sequencerEl) sequencerEl.classList.remove('hidden');
     // Show sequencer UI on right pane
     showSequencerControls();
   } else if (tabName === 'song') {
-    songEl.classList.remove('hidden');
+    if (songEl) songEl.classList.remove('hidden');
     // Show song controls on right pane
     showSongControls();
     // Compile song to update sequencer
