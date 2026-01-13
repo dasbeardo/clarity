@@ -790,6 +790,13 @@ input[type="range"]::-moz-range-thumb:hover {
   border-color: #5fd3bc;
 }
 
+.last-updated {
+  font-size: 10px;
+  color: #5c5c5c;
+  margin-left: 8px;
+  font-weight: normal;
+}
+
 /* Help Modal */
 .help-modal {
   position: fixed;
